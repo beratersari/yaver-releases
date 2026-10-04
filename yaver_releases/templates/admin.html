@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Admin · Yaver releases{% endblock %}
+{% block body %}
+<h1>Publish a release</h1>
+<p class="lede">Upload the zip your colleagues should install. One file is current for each platform. Uploading again replaces it. Use the same kind of package the PCs already run: the executable folder, or the full install zip.</p>
+{% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form class="panel" method="post" action="/admin/upload" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="platform">Platform</label>
+  <select id="platform" name="platform" required>
+    {% for key, label in platforms.items() %}
+    <option value="{{ key }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label for="version">Version</label>
+  <input id="version" name="version" inputmode="decimal" placeholder="0.9.72" required>
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" maxlength="8000" placeholder="What changed in this package."></textarea>
+  <label for="package">Zip file</label>
+  <input id="package" name="package" type="file" accept=".zip,application/zip" required>
+  <p><button type="submit">Publish</button></p>
+</form>
+
+<h2>Current packages</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Version</th>
+      <th>Kind</th>
+      <th>File</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in releases %}
+    <tr>
+      <td>{{ row.label }}</td>
+      <td>{{ row.version or "—" }}</td>
+      <td>{{ row.layout|layout_label or "—" }}{% if row.layout == "unknown" %}. Machines will refuse this zip.{% endif %}</td>
+      <td>{% if row.filename %}{{ row.filename }} · {{ row.size|size }}{% else %}—{% endif %}</td>
+      <td>
+        {% if row.version %}
+        <form method="post" action="/admin/delete">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="platform" value="{{ row.platform }}">
+          <button class="danger" type="submit">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<form method="post" action="/admin/logout">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p><button class="secondary" type="submit">Sign out</button></p>
+</form>
+{% endblock %}

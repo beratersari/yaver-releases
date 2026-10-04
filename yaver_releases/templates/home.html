@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Yaver releases{% endblock %}
+{% block body %}
+<h1>Yaver</h1>
+<p class="lede">Yaver runs OpenCode agents for work that arrives from Jira, GitLab, or Azure DevOps. This page is the copy your office downloads, so a new release does not have to come from the public internet one PC at a time.</p>
+<p>Pick the package that matches the computer. Windows is one package. Each Ubuntu release is its own package, because the executable build is tied to that Ubuntu version.</p>
+
+<div class="cards">
+  {% for row in releases %}
+  <article class="card">
+    <h2>{{ row.label }}</h2>
+    {% if row.version %}
+      <p class="meta">Version {{ row.version }} · {{ row.size|size }}{% if row.layout %} · {{ row.layout|layout_label }}{% endif %}</p>
+      {% if row.notes %}<p>{{ row.notes }}</p>{% endif %}
+      <a class="button" href="{{ row.download_path }}">Download</a>
+    {% else %}
+      <p class="meta">Not published yet.</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+
+<h2>Install, then update from Settings</h2>
+<p>The first install is on the <a href="/install">install page</a>. After that, each person opens Yaver, goes to Settings, then Runtime, and sets this server’s address and port. Update closes Yaver, fetches the package for that computer, and starts Yaver again. The <code>.env</code> file and the data folder stay.</p>
+{% endblock %}

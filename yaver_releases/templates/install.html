@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Install Yaver{% endblock %}
+{% block body %}
+<h1>Install Yaver</h1>
+<p class="lede">Download the package for this computer from the <a href="/">releases page</a>. The zip is either an executable build or a full install zip. The steps below follow that shape. OpenCode and Codex are not inside the executable. The full install zip can install them.</p>
+
+<h2 id="windows">Windows</h2>
+<h3>Executable</h3>
+<p>The zip contains <code>yaver.exe</code>, a folder named <code>_internal</code>, and <code>.env.example</code>.</p>
+<ol class="steps">
+  <li>Extract the zip. Leave <code>yaver.exe</code> and <code>_internal</code> in the same folder.</li>
+  <li>Copy <code>.env.example</code> to <code>.env</code> in that folder and set the Jira host, token, and board id.</li>
+  <li>Run <code>yaver.exe</code>. It listens on port 8080.</li>
+  <li>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>.</li>
+</ol>
+<h3>Install zip</h3>
+<p>The zip contains <code>install-dashboard.bat</code> at the top.</p>
+<ol class="steps">
+  <li>Extract the zip.</li>
+  <li>Run <code>install-dashboard.bat</code>, then <code>install-backends.bat</code>, then <code>install-codex.bat</code>.</li>
+  <li>Edit <code>.env</code>. Set the Jira host, token, and board id.</li>
+  <li>Run <code>start.bat</code>.</li>
+  <li>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>. Open the OpenCode window only with <code>start-opencode.bat</code> from this folder.</li>
+</ol>
+
+<h2 id="ubuntu">Ubuntu 18.04, 20.04, 22.04, and 24.04</h2>
+<p>Download the Ubuntu version that matches the computer. An executable built on Ubuntu 24.04 does not start on 22.04 or older. Check with <code>lsb_release -rs</code>.</p>
+<h3>Executable</h3>
+<ol class="steps">
+  <li>Extract the zip. You should see <code>yaver</code> and <code>_internal</code>.</li>
+  <li>Copy <code>.env.example</code> to <code>.env</code> and edit it.</li>
+  <li>Run <code>./yaver start</code> as the account that should own the work. Do not use root.</li>
+  <li>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a> on that machine.</li>
+</ol>
+<h3>Install zip</h3>
+<ol class="steps">
+  <li>Extract the zip so <code>install-dashboard.sh</code> sits next to <code>src</code> and <code>vendor</code>.</li>
+  <li>Run <code>./install-dashboard.sh</code>, then <code>./install-backends.sh</code>, then <code>./install-codex.sh</code>.</li>
+  <li>The Linux package sets <code>YAVER_BASE_DIR=/var/tmp/yaver</code> so every account can write there without sudo. Data is <code>/var/tmp/yaver/yaver</code> and clones are <code>/var/tmp/yaver/t</code>.</li>
+  <li>Edit <code>.env</code>, then run <code>./start-backend.sh</code> as that same user. Yaver and OpenCode serve have to be the same user. A systemd unit needs <code>User=</code> and <code>Group=</code>. Do not start either process with sudo.</li>
+  <li>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>.</li>
+</ol>
+
+<h2 id="update">Update from Yaver</h2>
+<ol class="steps">
+  <li>Leave this site running on a PC the others can reach, for example <code>http://192.168.1.20:8090</code>.</li>
+  <li>In Yaver, open Settings, then Runtime.</li>
+  <li>Set the release server address and port. Save, then choose Check.</li>
+  <li>Update closes Yaver, downloads the package for this Windows PC or this Ubuntu version, and starts Yaver again. Settings in <code>.env</code> stay. The data folder stays. A git checkout is left alone.</li>
+</ol>
+<p>Publish the same kind of zip the computers already use. An executable install will not apply a full install zip, and a full install will not apply an executable zip.</p>
+
+<h2 id="server">Run this site</h2>
+<pre>python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+copy .env.example .env
+.venv\Scripts\python -m yaver_releases</pre>
+<p>On Linux, use <code>python3 -m venv .venv</code>, <code>.venv/bin/pip</code>, and <code>.venv/bin/python -m yaver_releases</code>. The default listen address is every interface on port 8090. Downloads are open on that port. The admin password is the only thing that protects uploads, so do not forward the port to the public internet.</p>
+<p>Windows firewall, from an elevated prompt:</p>
+<pre>netsh advfirewall firewall add rule name="Yaver releases" dir=in action=allow protocol=TCP localport=8090</pre>
+<p>Ubuntu:</p>
+<pre>sudo ufw allow 8090/tcp</pre>
+{% endblock %}
