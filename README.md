@@ -17,7 +17,7 @@ On Linux, use `python3`, `.venv/bin/pip`, and `.venv/bin/python`. `serve.bat` an
 
 The site listens on `0.0.0.0:8090` unless `YAVER_RELEASE_HOST` and `YAVER_RELEASE_PORT` say otherwise. Open `http://127.0.0.1:8090`.
 
-Set both `YAVER_RELEASE_ADMIN_USER` and `YAVER_RELEASE_ADMIN_PASSWORD` before the first login. There is no default password. Downloads stay open on the LAN. The password only protects the upload page. Do not forward this port to the public internet.
+Set both `YAVER_RELEASE_ADMIN_USER` and `YAVER_RELEASE_ADMIN_PASSWORD` before the first login. There is no default password. Downloads stay open on the LAN. The password only protects the upload page. Open `/admin` to sign in. The download pages do not link to that page. Do not forward this port to the public internet.
 
 Windows firewall, from an elevated prompt:
 
@@ -41,8 +41,12 @@ Publish one zip per platform:
 
 Upload the same kind of package those PCs already run.
 
-- An executable zip has `yaver.exe` or `yaver` next to `_internal`.
-- An install zip has `src/daemon.py` and `VERSION`, plus `install-dashboard.bat` or `install-dashboard.sh`.
+- An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip.
+- An install zip has `src/daemon.py` and `VERSION` at the top, plus `install-dashboard.bat` or `install-dashboard.sh`.
+
+If the uploaded zip has a single folder around those files, the site removes that folder before it publishes. A download then opens onto the binary and the other files. The checksum on the site is the checksum of that published zip.
+
+Leave the version field empty when the zip has a `VERSION` file at the top. The site publishes that text. A filename that contains `latest`, such as `yaver-windows-latest.zip` or `yaver-ubuntu-22.04-latest.zip`, is the usual executable upload. Type a version only when that file is missing. A typed version that disagrees with the file is refused.
 
 A PC running the executable will not install a full install zip, and a full install will not apply an executable zip. Uploading again for the same platform replaces the current file.
 

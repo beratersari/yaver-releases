@@ -26,9 +26,11 @@ from yaver_releases.auth import (
 from yaver_releases.platforms import (
     PLATFORMS,
     PackageError,
+    flatten_wrapper,
     inspect_zip,
     require_version,
     safe_filename,
+    version_from_zip,
 )
 from yaver_releases.store import ReleaseStore
 
@@ -222,14 +224,13 @@ def create_app(
         session = _require_admin(request, app, csrf)
         try:
             key = _platform_or_404(platform)
-            ver = require_version(version)
+            typed = require_version(version) if (version or "").strip() else ""
             filename = safe_filename(package.filename or "")
             note = _clean_notes(notes)
         except (PackageError, HTTPException) as exc:
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
             return _admin_again(request, app, session, str(detail))
         blob = root / "incoming.tmp"
-        digest = hashlib.sha256()
         size = 0
         try:
             with blob.open("wb") as handle:
@@ -240,18 +241,35 @@ def create_app(
                     size += len(chunk)
                     if size > _MAX_UPLOAD:
                         raise PackageError("The zip is larger than 8 GB.")
-                    digest.update(chunk)
                     handle.write(chunk)
             magic = blob.read_bytes()[:4]
             if magic not in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
                 raise PackageError("The file is not a zip.")
+            flatten_wrapper(blob)
             layout = inspect_zip(blob)
+            inside = version_from_zip(blob)
+            if inside and typed and inside != typed:
+                raise PackageError(f"The VERSION file says {inside}.")
+            ver = inside or typed
+            if not ver:
+                raise PackageError(
+                    "Type a version, or put a VERSION file at the top of the zip."
+                )
+            digest = hashlib.sha256()
+            published_size = 0
+            with blob.open("rb") as handle:
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    published_size += len(chunk)
+                    digest.update(chunk)
             store.publish(
                 platform=key,
                 version=ver,
                 filename=filename,
                 sha256=digest.hexdigest(),
-                size=size,
+                size=published_size,
                 layout=layout,
                 notes=note,
                 blob=blob,

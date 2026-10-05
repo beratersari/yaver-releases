@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import zipfile
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from yaver_releases.app import create_app
 from yaver_releases.dotenv import load_dotenv
-from yaver_releases.platforms import classify_members
+from yaver_releases.platforms import classify_members, flatten_wrapper
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -61,13 +62,75 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert home.status_code == 200
     assert "Not published yet" in home.text
     assert "Install" in home.text
+    assert 'href="/admin"' not in home.text
+    login = client.get("/admin/login")
+    assert login.status_code == 200
+    assert 'href="/admin"' not in login.text
+    css = client.get("/static/site.css")
+    assert css.status_code == 200
+    assert "Geist Variable" in css.text
+    assert client.get("/static/yaver-wink.gif").status_code == 200
     missing = client.get("/api/latest?platform=windows")
     assert missing.status_code == 404
     assert client.get("/api/latest?platform=../windows").status_code == 404
     install = client.get("/install")
     assert install.status_code == 200
+    assert 'href="/admin"' not in install.text
     assert "YAVER_BASE_DIR=/var/tmp/yaver" in install.text
     assert "yaver.exe" in install.text
+
+
+def test_flatten_wrapper_removes_one_folder_and_keeps_a_flat_zip(tmp_path: Path):
+    wrapped = tmp_path / "wrapped.zip"
+    info = zipfile.ZipInfo("bundle/yaver")
+    info.external_attr = 0o755 << 16
+    info.create_system = 3
+    with zipfile.ZipFile(wrapped, "w") as archive:
+        archive.writestr(info, b"bin")
+        archive.writestr("bundle/_internal/lib.so", b"so")
+        archive.writestr("bundle/VERSION", b"1.0.0\n")
+    assert flatten_wrapper(wrapped) is True
+    with zipfile.ZipFile(wrapped) as archive:
+        assert set(archive.namelist()) == {"yaver", "_internal/lib.so", "VERSION"}
+        stored = archive.getinfo("yaver")
+        assert stored.create_system == 3
+        assert (stored.external_attr >> 16) & 0o777 == 0o755
+    before = wrapped.read_bytes()
+    assert flatten_wrapper(wrapped) is False
+    assert wrapped.read_bytes() == before
+
+    source = tmp_path / "source.zip"
+    source.write_bytes(
+        _zip(
+            {
+                "virtual_developer-linux/src/daemon.py": "x",
+                "virtual_developer-linux/VERSION": "1.0.0",
+                "virtual_developer-linux/install-dashboard.sh": "run",
+            }
+        )
+    )
+    assert flatten_wrapper(source) is True
+    with zipfile.ZipFile(source) as archive:
+        assert set(archive.namelist()) == {
+            "src/daemon.py",
+            "VERSION",
+            "install-dashboard.sh",
+        }
+
+    with_dir = tmp_path / "dir.zip"
+    with zipfile.ZipFile(with_dir, "w") as archive:
+        archive.writestr("bundle/", "")
+        archive.writestr("bundle/yaver.exe", b"x")
+        archive.writestr("bundle/_internal/a", b"y")
+    assert flatten_wrapper(with_dir) is True
+    with zipfile.ZipFile(with_dir) as archive:
+        assert set(archive.namelist()) == {"yaver.exe", "_internal/a"}
+
+    mixed = tmp_path / "mixed.zip"
+    mixed.write_bytes(_zip({"yaver.exe": "x", "_internal/a": "b", "notes/readme.txt": "n"}))
+    original = mixed.read_bytes()
+    assert flatten_wrapper(mixed) is False
+    assert mixed.read_bytes() == original
 
 
 def test_classify_executable_source_and_wrapped_folder():
@@ -123,13 +186,80 @@ def test_upload_requires_login_and_then_publishes(tmp_path: Path):
 
     downloaded = client.get("/download/windows")
     assert downloaded.status_code == 200
-    assert downloaded.content == payload
+    assert hashlib.sha256(downloaded.content).hexdigest() == body["sha256"]
+    assert body["size"] == len(downloaded.content)
+    with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+        assert set(archive.namelist()) == {
+            "yaver.exe",
+            "_internal/marker",
+            ".env.example",
+        }
     assert "yaver-windows.zip" in downloaded.headers["content-disposition"]
 
     home = client.get("/")
     assert "0.9.72" in home.text
     assert "<script>alert" not in home.text
     assert "&lt;script&gt;" in home.text
+
+
+def test_a_latest_named_zip_publishes_the_version_file(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    payload = _zip(
+        {
+            "bundle/yaver.exe": "bin",
+            "bundle/_internal/a": "x",
+            "bundle/VERSION": "\ufeff0.9.73\n",
+        }
+    )
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "windows", "version": "", "csrf": token},
+        files={"package": ("yaver-windows-latest.zip", payload, "application/zip")},
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    body = client.get("/api/latest?platform=windows").json()
+    assert body["version"] == "0.9.73"
+    assert body["filename"] == "yaver-windows-latest.zip"
+    assert "latest" in body["filename"]
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/windows").content)) as archive:
+        assert archive.read("VERSION").decode("utf-8-sig").strip() == "0.9.73"
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    mismatch = client.post(
+        "/admin/upload",
+        data={"platform": "ubuntu-22.04", "version": "0.9.70", "csrf": token},
+        files={
+            "package": (
+                "yaver-ubuntu-22.04-latest.zip",
+                _zip({"yaver": "b", "_internal/a": "x", "VERSION": "0.9.73\n"}),
+                "application/zip",
+            )
+        },
+    )
+    assert mismatch.status_code == 400
+    assert "The VERSION file says 0.9.73." in mismatch.text
+    assert client.get("/api/latest?platform=ubuntu-22.04").status_code == 404
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    missing = client.post(
+        "/admin/upload",
+        data={"platform": "ubuntu-20.04", "version": " ", "csrf": token},
+        files={
+            "package": (
+                "yaver-ubuntu-20.04-latest.zip",
+                _zip({"yaver": "b", "_internal/a": "x"}),
+                "application/zip",
+            )
+        },
+    )
+    assert missing.status_code == 400
+    assert "VERSION file" in missing.text
 
 
 def test_rejects_zip_slip_bad_version_and_replaces_the_previous_file(tmp_path: Path):

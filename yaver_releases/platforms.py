@@ -5,8 +5,10 @@ Keep these ids in sync with ``src/self_update.py`` in the Yaver repo.
 
 from __future__ import annotations
 
+import os
 import re
 import stat
+import zipfile
 from pathlib import Path
 
 PLATFORMS: dict[str, str] = {
@@ -31,6 +33,38 @@ def require_version(value: str) -> str:
     if not _VERSION.fullmatch(text):
         raise PackageError("Version must look like 0.9.72.")
     return text
+
+
+def version_from_zip(path: Path) -> str | None:
+    """Read ``VERSION`` at the zip root.
+
+    Returns ``None`` when that file is absent. A present file must be a
+    short version string. Call this after a wrapping folder is removed.
+    """
+    if not zipfile.is_zipfile(path):
+        raise PackageError("The file is not a zip.")
+    chosen: zipfile.ZipInfo | None = None
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if _is_link(info) or _is_dir_entry(info):
+                continue
+            if _member_parts(info.filename) != ["VERSION"]:
+                continue
+            chosen = info
+            break
+        if chosen is None:
+            return None
+        if int(chosen.file_size) > 200:
+            raise PackageError("The VERSION file is not a version.")
+        raw = archive.read(chosen)
+    try:
+        text = raw.decode("utf-8-sig").strip()
+    except UnicodeError as exc:
+        raise PackageError("The VERSION file is not a version.") from exc
+    line = text.splitlines()[0].strip() if text else ""
+    if not line:
+        raise PackageError("The VERSION file is empty.")
+    return require_version(line)
 
 
 def safe_filename(name: str) -> str:
@@ -58,10 +92,91 @@ def _is_link(info: object) -> bool:
     return stat.S_ISLNK(mode)
 
 
+def _is_dir_entry(info: zipfile.ZipInfo) -> bool:
+    name = str(info.filename).replace("\\", "/")
+    return info.is_dir() or name.endswith("/")
+
+
+def _single_folder_prefix(names: list[str]) -> str | None:
+    """Return ``Folder/`` when every file lives under that one directory."""
+    if not names:
+        return None
+    tops = {name.split("/", 1)[0] for name in names}
+    if len(tops) != 1 or any("/" not in name for name in names):
+        return None
+    return next(iter(tops)) + "/"
+
+
+def flatten_wrapper(path: Path) -> bool:
+    """Drop one wrapping folder so a download lists the package files.
+
+    A zip that already has ``yaver.exe`` or ``VERSION`` at the top is left
+    unchanged. Unsafe paths are rejected before anything is rewritten.
+    """
+    if not zipfile.is_zipfile(path):
+        raise PackageError("The file is not a zip.")
+    with zipfile.ZipFile(path) as archive:
+        infos = archive.infolist()
+        if len(infos) > _MAX_MEMBERS:
+            raise PackageError("The zip has too many files.")
+        file_names: list[str] = []
+        total = 0
+        for info in infos:
+            if _is_link(info):
+                raise PackageError("The zip contains a symlink.")
+            if _is_dir_entry(info):
+                continue
+            parts = _member_parts(info.filename)
+            total += max(0, int(info.file_size))
+            if total > _MAX_UNCOMPRESSED:
+                raise PackageError("The zip expands to more than 16 GB.")
+            if parts:
+                file_names.append("/".join(parts))
+        prefix = _single_folder_prefix(file_names)
+        if prefix is None:
+            return False
+        expanded = 0
+        tmp = path.with_name(path.name + ".flat")
+        try:
+            with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as out:
+                for info in infos:
+                    if _is_dir_entry(info):
+                        continue
+                    parts = _member_parts(info.filename)
+                    if not parts:
+                        continue
+                    rel = "/".join(parts)
+                    if not rel.startswith(prefix):
+                        raise PackageError("The zip folder could not be removed.")
+                    inner = rel[len(prefix):]
+                    if not inner or any(part == ".." for part in inner.split("/")):
+                        raise PackageError("The zip folder could not be removed.")
+                    stored = zipfile.ZipInfo(filename=inner, date_time=info.date_time)
+                    stored.compress_type = zipfile.ZIP_DEFLATED
+                    stored.external_attr = info.external_attr
+                    stored.create_system = info.create_system
+                    with archive.open(info, "r") as src, out.open(stored, "w") as dest:
+                        while True:
+                            block = src.read(1024 * 1024)
+                            if not block:
+                                break
+                            expanded += len(block)
+                            if expanded > _MAX_UNCOMPRESSED:
+                                raise PackageError("The zip expands to more than 16 GB.")
+                            dest.write(block)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+    try:
+        os.replace(tmp, path)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise PackageError("The zip folder could not be removed.") from exc
+    return True
+
+
 def inspect_zip(path: Path) -> str:
     """Return ``frozen``, ``source``, or ``unknown``. Reject unsafe zips."""
-    import zipfile
-
     if not zipfile.is_zipfile(path):
         raise PackageError("The file is not a zip.")
     names: list[str] = []

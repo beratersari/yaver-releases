@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Admin · Yaver releases{% endblock %}
 {% block body %}
+<p class="kicker">Admin</p>
 <h1>Publish a release</h1>
-<p class="lede">Upload the zip your colleagues should install. One file is current for each platform. Uploading again replaces it. Use the same kind of package the PCs already run: the executable folder, or the full install zip.</p>
+<p class="lede">Upload the zip your colleagues should install. One file is current for each platform. Uploading again replaces it. Use the same kind of package the PCs already run: the executable, or the full install zip. The download lists <code>yaver.exe</code> or <code>yaver</code>, or the install scripts, at the top. A zip that contains only one folder is published without that folder.</p>
 {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
@@ -15,7 +16,8 @@
     {% endfor %}
   </select>
   <label for="version">Version</label>
-  <input id="version" name="version" inputmode="decimal" placeholder="0.9.72" required>
+  <input id="version" name="version" inputmode="decimal" placeholder="0.9.72" autocomplete="off" aria-describedby="version-hint">
+  <p id="version-hint" class="quiet">Leave this empty when the zip has a VERSION file at the top. A filename that contains latest still uses that file.</p>
   <label for="notes">Notes</label>
   <textarea id="notes" name="notes" maxlength="8000" placeholder="What changed in this package."></textarea>
   <label for="package">Zip file</label>
@@ -24,6 +26,7 @@
 </form>
 
 <h2>Current packages</h2>
+<div class="table-wrap">
 <table>
   <thead>
     <tr>
@@ -54,6 +57,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 
 <form method="post" action="/admin/logout">
   <input type="hidden" name="csrf" value="{{ csrf }}">
