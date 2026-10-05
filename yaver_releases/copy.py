@@ -1,0 +1,273 @@
+"""Editable public page text.
+
+The admin page stores replacements. A missing row uses the text in
+``DEFAULTS``. Visitors never send this text; only a signed-in admin does.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+
+from markupsafe import Markup, escape
+
+_MAX_CHARS = 20_000
+_TOKEN = re.compile(r"\{([a-z0-9]+)\}")
+_INLINE = re.compile(r"`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)")
+
+# Order is the order of the admin form and the public pages.
+SECTIONS: tuple[tuple[str, str, str], ...] = (
+    ("home_intro", "Releases page introduction", "Releases"),
+    ("home_update", "Releases page, after install", "Releases"),
+    ("install_intro", "Install page introduction", "Install"),
+    ("windows", "Windows install", "Install"),
+    ("windows_update", "Windows update", "Install"),
+    ("ubuntu_intro", "Ubuntu note", "Install"),
+    ("ubuntu18", "Ubuntu 18.04", "Install"),
+    ("ubuntu20", "Ubuntu 20.04", "Install"),
+    ("ubuntu22", "Ubuntu 22.04", "Install"),
+    ("ubuntu24", "Ubuntu 24.04", "Install"),
+    ("ubuntu_update", "Ubuntu update, shown in each version", "Install"),
+)
+
+TOKEN_HELP: tuple[tuple[str, str], ...] = (
+    ("{base}", "this site, such as http://192.168.1.20:8090"),
+    ("{windows}", "Windows zip"),
+    ("{ubuntu18}", "Ubuntu 18.04 zip"),
+    ("{ubuntu20}", "Ubuntu 20.04 zip"),
+    ("{ubuntu22}", "Ubuntu 22.04 zip"),
+    ("{ubuntu24}", "Ubuntu 24.04 zip"),
+)
+
+def _ubuntu_steps(version: str, token: str) -> str:
+    return f"""```
+mkdir -p "$HOME/yaver"
+curl -fL -o /tmp/yaver-{version}.zip "{{{token}}}"
+unzip -o /tmp/yaver-{version}.zip -d "$HOME/yaver"
+cd "$HOME/yaver"
+if [ ! -f .env ]; then cp .env.example .env; fi
+nano .env
+chmod 755 yaver
+setsid nohup ./yaver start > yaver.log 2>&1 < /dev/null &
+```
+"""
+
+
+DEFAULTS: dict[str, str] = {
+    "home_intro": (
+        "Yaver runs OpenCode agents for work that arrives from Jira, GitLab, "
+        "or Azure DevOps. This page is the copy your office downloads, so a "
+        "new release does not have to come from the public internet one PC "
+        "at a time.\n\n"
+        "Pick the package that matches the computer. Windows is one package. "
+        "Each Ubuntu release is its own package, because the executable build "
+        "is tied to that Ubuntu version."
+    ),
+    "home_update": (
+        "The first install is on the [install page](/install). After that, "
+        "stop Yaver and run `yaver update` (Windows: `yaver.exe update`). "
+        "The command reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`, "
+        "downloads the package for that "
+        "computer, replaces the install, and starts Yaver again. The `.env` "
+        "file and the data folder stay."
+    ),
+    "install_intro": (
+        "Open this page from the address the other computers use, then copy "
+        "the commands. Everyone installs the executable. The commands "
+        "download that zip, unpack it, and start Yaver. OpenCode and Codex "
+        "are not inside the executable."
+    ),
+    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, and `.env.example`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
+
+PowerShell:
+
+```
+curl.exe -fL -o yaver-windows.zip "{windows}"
+New-Item -ItemType Directory -Force -Path yaver | Out-Null
+tar.exe -xf yaver-windows.zip -C yaver
+cd yaver
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+.\\yaver.exe
+```
+
+Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+""",
+    "windows_update": r"""Stop Yaver first. The command refuses to run while the dashboard port is open. It reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`. When the package is in place, the command starts Yaver again. `.env` and the data folder stay.
+
+```
+Get-Process yaver -ErrorAction SilentlyContinue | Stop-Process
+cd C:\path\to\yaver
+.\yaver.exe update
+```
+""",
+    "ubuntu_intro": (
+        "Open the version that matches the computer. An executable built on "
+        "Ubuntu 24.04 does not start on 22.04 or older. Check with "
+        "`lsb_release -rs`. These commands use `unzip`. If it is missing, "
+        "run `sudo apt-get install -y unzip` once. Edit `.env` before the "
+        "first real run and set the Jira host, token, and board id. "
+        "`nano .env` opens that file. If nano is missing, run "
+        "`sudo apt-get install -y nano` once. Run Yaver as the account "
+        "that should own the work. Do not use root. The log is `yaver.log` "
+        "in that folder. Open [http://127.0.0.1:8080](http://127.0.0.1:8080) "
+        "on that machine."
+    ),
+    "ubuntu18": _ubuntu_steps("18.04", "ubuntu18"),
+    "ubuntu20": _ubuntu_steps("20.04", "ubuntu20"),
+    "ubuntu22": _ubuntu_steps("22.04", "ubuntu22"),
+    "ubuntu24": _ubuntu_steps("24.04", "ubuntu24"),
+    "ubuntu_update": r"""Stop Yaver first. The command refuses to run while the dashboard port is open. It reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`. When the package is in place, the command starts Yaver again. `.env` and the data folder stay.
+
+```
+pid=$(ss -ltnp 'sport = :8080' | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n 1)
+if [ -n "$pid" ]; then kill "$pid"; sleep 1; fi
+cd "$HOME/yaver"
+chmod 755 ./yaver
+./yaver update
+```
+""",
+}
+
+
+class CopyError(ValueError):
+    """The submitted page text cannot be stored."""
+
+
+def sections_for_edit(
+    stored: Mapping[str, str],
+    drafts: Mapping[str, str] | None = None,
+) -> list[dict[str, object]]:
+    drafts = drafts or {}
+    rows: list[dict[str, object]] = []
+    for key, label, page in SECTIONS:
+        if key in drafts:
+            body = drafts[key]
+        elif key in stored:
+            body = stored[key]
+        else:
+            body = DEFAULTS[key]
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "page": page,
+                "body": body,
+                "tall": key not in {"home_intro", "home_update", "install_intro", "ubuntu_intro"},
+            }
+        )
+    return rows
+
+
+def public_html(stored: Mapping[str, str], tokens: Mapping[str, str]) -> dict[str, Markup]:
+    rendered: dict[str, Markup] = {}
+    for key, _label, _page in SECTIONS:
+        raw = stored[key] if key in stored else DEFAULTS[key]
+        rendered[key] = render_copy(fill(raw, tokens))
+    return rendered
+
+
+def clean_body(value: str) -> str:
+    text = (value or "").replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    if len(text) > _MAX_CHARS:
+        raise CopyError(f"Each text must be {_MAX_CHARS} characters or fewer.")
+    return text
+
+
+def fill(text: str, tokens: Mapping[str, str]) -> str:
+    """Replace ``{name}`` tokens. Anything else, including ``{ Copy-Item }``, stays."""
+
+    def repl(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in tokens:
+            return str(tokens[key])
+        return match.group(0)
+
+    return _TOKEN.sub(repl, text)
+
+
+def tokens_from_url(base_url: str, host: str, port: int | None, scheme: str) -> dict[str, str]:
+    base = (base_url or "").rstrip("/")
+    if port is None:
+        port_text = "443" if scheme == "https" else "80"
+    else:
+        port_text = str(port)
+    return {
+        "base": base,
+        "host": host or "",
+        "port": port_text,
+        "windows": f"{base}/download/windows",
+        "ubuntu18": f"{base}/download/ubuntu-18.04",
+        "ubuntu20": f"{base}/download/ubuntu-20.04",
+        "ubuntu22": f"{base}/download/ubuntu-22.04",
+        "ubuntu24": f"{base}/download/ubuntu-24.04",
+    }
+
+
+def render_copy(text: str) -> Markup:
+    """Turn admin text into HTML.
+
+    A line that is only ``` opens a command block. `backticks` mark a short
+    command. ``[label](url)`` makes a link when the url is http(s) or a
+    same-site path. Every other character is escaped.
+    """
+    lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    blocks: list[Markup] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip().startswith("```"):
+            index += 1
+            code: list[str] = []
+            while index < len(lines) and lines[index].strip() != "```":
+                code.append(lines[index])
+                index += 1
+            if index < len(lines):
+                index += 1
+            blocks.append(Markup("<pre>") + escape("\n".join(code)) + Markup("</pre>"))
+            continue
+        if not lines[index].strip():
+            index += 1
+            continue
+        paragraph: list[str] = []
+        while index < len(lines) and lines[index].strip() and not lines[index].strip().startswith("```"):
+            paragraph.append(lines[index])
+            index += 1
+        inner = Markup("<br>\n").join(_inline(line) for line in paragraph)
+        blocks.append(Markup("<p>") + inner + Markup("</p>"))
+    return Markup("\n").join(blocks)
+
+
+def _inline(text: str) -> Markup:
+    parts: list[Markup] = []
+    cursor = 0
+    for match in _INLINE.finditer(text):
+        parts.append(escape(text[cursor:match.start()]))
+        code = match.group(1)
+        if code is not None:
+            parts.append(Markup("<code>") + escape(code) + Markup("</code>"))
+        else:
+            label = match.group(2)
+            url = match.group(3)
+            if _href_ok(url):
+                parts.append(
+                    Markup('<a href="')
+                    + escape(url)
+                    + Markup('">')
+                    + escape(label)
+                    + Markup("</a>")
+                )
+            else:
+                parts.append(escape(match.group(0)))
+        cursor = match.end()
+    parts.append(escape(text[cursor:]))
+    return Markup("").join(parts)
+
+
+def _href_ok(url: str) -> bool:
+    if url.startswith("/") and not url.startswith("//") and "\\" not in url:
+        return True
+    lowered = url.lower()
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        return False
+    rest = url.split("://", 1)[1]
+    return bool(rest) and not rest.startswith("/") and "<" not in url and '"' not in url and ">" not in url

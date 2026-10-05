@@ -3,7 +3,7 @@
 {% block body %}
 <p class="kicker">Admin</p>
 <h1>Publish a release</h1>
-<p class="lede">Upload the zip your colleagues should install. One file is current for each platform. Uploading again replaces it. Use the same kind of package the PCs already run: the executable, or the full install zip. The download lists <code>yaver.exe</code> or <code>yaver</code>, or the install scripts, at the top. A zip that contains only one folder is published without that folder.</p>
+<p class="lede">Upload the executable zip your colleagues should install. One file is current for each platform. Uploading again replaces it. The zip lists <code>yaver.exe</code> or <code>yaver</code> next to <code>_internal</code> at the top. A zip that contains only one folder is published without that folder.</p>
 {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
@@ -58,6 +58,24 @@
   </tbody>
 </table>
 </div>
+
+<h2 id="page-text">Page text</h2>
+<p id="copy-hint" class="quiet">This is the wording on the releases page and the install page. A line that is only ``` starts a command block. `backticks` mark a short command. [label](/path) makes a link. These tokens are filled from the address the visitor used to open the page:</p>
+<p class="quiet">{% for name, detail in token_help %}<code>{{ name }}</code> {{ detail }}{% if not loop.last %}. {% endif %}{% endfor %}.</p>
+
+<form class="panel" method="post" action="/admin/copy">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for section in sections %}
+  <label for="copy-{{ section.key }}">{{ section.page }} · {{ section.label }}</label>
+  <textarea id="copy-{{ section.key }}" name="{{ section.key }}" maxlength="20000" spellcheck="false" aria-describedby="copy-hint"{% if section.tall %} class="tall"{% endif %}>{{ section.body }}</textarea>
+  {% endfor %}
+  <p><button type="submit">Save page text</button></p>
+</form>
+
+<form method="post" action="/admin/copy/reset">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p><button class="secondary" type="submit">Restore original text</button></p>
+</form>
 
 <form method="post" action="/admin/logout">
   <input type="hidden" name="csrf" value="{{ csrf }}">

@@ -44,6 +44,15 @@ class ReleaseStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS page_copy (
+                    key TEXT PRIMARY KEY,
+                    body TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     def get(self, platform: str) -> dict | None:
         with self._connect() as conn:
@@ -153,6 +162,30 @@ class ReleaseStore:
         if published is None:
             raise RuntimeError("The release was not stored.")
         return published
+
+    def copy_map(self) -> dict[str, str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT key, body FROM page_copy").fetchall()
+        return {str(row["key"]): str(row["body"]) for row in rows}
+
+    def save_copy(self, updates: dict[str, str]) -> None:
+        now = _now()
+        with self._connect() as conn:
+            for key, body in updates.items():
+                conn.execute(
+                    """
+                    INSERT INTO page_copy (key, body, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        body = excluded.body,
+                        updated_at = excluded.updated_at
+                    """,
+                    (key, body, now),
+                )
+
+    def clear_copy(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM page_copy")
 
     def delete(self, platform: str) -> None:
         path = self.blob_path(platform)

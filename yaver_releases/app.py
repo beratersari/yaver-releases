@@ -23,6 +23,15 @@ from yaver_releases.auth import (
     sign_csrf,
     sign_session,
 )
+from yaver_releases.copy import (
+    SECTIONS,
+    TOKEN_HELP,
+    CopyError,
+    clean_body,
+    public_html,
+    sections_for_edit,
+    tokens_from_url,
+)
 from yaver_releases.platforms import (
     PLATFORMS,
     PackageError,
@@ -138,7 +147,7 @@ def create_app(
         return _TEMPLATES.TemplateResponse(
             request,
             "home.html",
-            {"releases": store.list_all()},
+            {"releases": store.list_all(), "sections": _public_sections(request, store)},
         )
 
     @app.get("/install", response_class=HTMLResponse)
@@ -146,7 +155,7 @@ def create_app(
         return _TEMPLATES.TemplateResponse(
             request,
             "install.html",
-            {"releases": store.list_all()},
+            {"releases": store.list_all(), "sections": _public_sections(request, store)},
         )
 
     @app.get("/admin/login", response_class=HTMLResponse)
@@ -193,24 +202,11 @@ def create_app(
         return response
 
     @app.get("/admin", response_class=HTMLResponse)
-    def admin(request: Request, uploaded: str = "") -> HTMLResponse:
+    def admin(request: Request, uploaded: str = "", saved: str = "") -> HTMLResponse:
         session = _session_or_redirect(request, app)
         if isinstance(session, RedirectResponse):
             return session
-        notice = ""
-        if uploaded in PLATFORMS:
-            notice = f"Published the {PLATFORMS[uploaded]} package."
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "admin.html",
-            {
-                "releases": store.list_all(),
-                "platforms": PLATFORMS,
-                "csrf": session["csrf"],
-                "notice": notice,
-                "error": "",
-            },
-        )
+        return _admin_page(request, app, session, _notice_for(uploaded, saved), "")
 
     @app.post("/admin/upload", response_class=HTMLResponse)
     def upload(
@@ -290,6 +286,25 @@ def create_app(
         store.delete(key)
         return RedirectResponse("/admin", status_code=303)
 
+    @app.post("/admin/copy", response_class=HTMLResponse)
+    async def save_page_copy(request: Request):
+        form = await request.form()
+        csrf = str(form.get("csrf") or "")
+        session = _require_admin(request, app, csrf)
+        drafts = {key: str(form.get(key) or "") for key, _label, _page in SECTIONS}
+        try:
+            cleaned = {key: clean_body(drafts[key]) for key, _label, _page in SECTIONS}
+        except CopyError as exc:
+            return _admin_page(request, app, session, "", str(exc), drafts=drafts, status_code=400)
+        store.save_copy(cleaned)
+        return RedirectResponse("/admin?saved=text", status_code=303)
+
+    @app.post("/admin/copy/reset")
+    def reset_page_copy(request: Request, csrf: str = Form("")):
+        _require_admin(request, app, csrf)
+        store.clear_copy()
+        return RedirectResponse("/admin?saved=reset", status_code=303)
+
     return app
 
 
@@ -362,7 +377,36 @@ def _login_page(request: Request, app: FastAPI, error: str) -> HTMLResponse:
     return body
 
 
-def _admin_again(request: Request, app: FastAPI, session: dict, error: str) -> HTMLResponse:
+def _notice_for(uploaded: str, saved: str) -> str:
+    if uploaded in PLATFORMS:
+        return f"Published the {PLATFORMS[uploaded]} package."
+    if saved == "text":
+        return "Saved the page text."
+    if saved == "reset":
+        return "Restored the original page text."
+    return ""
+
+
+def _public_sections(request: Request, store: ReleaseStore):
+    tokens = tokens_from_url(
+        str(request.base_url),
+        request.url.hostname or "",
+        request.url.port,
+        request.url.scheme,
+    )
+    return public_html(store.copy_map(), tokens)
+
+
+def _admin_page(
+    request: Request,
+    app: FastAPI,
+    session: dict,
+    notice: str,
+    error: str,
+    *,
+    drafts: dict[str, str] | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
     return _TEMPLATES.TemplateResponse(
         request,
         "admin.html",
@@ -370,11 +414,17 @@ def _admin_again(request: Request, app: FastAPI, session: dict, error: str) -> H
             "releases": app.state.store.list_all(),
             "platforms": PLATFORMS,
             "csrf": session["csrf"],
-            "notice": "",
+            "notice": notice,
             "error": error,
+            "sections": sections_for_edit(app.state.store.copy_map(), drafts),
+            "token_help": TOKEN_HELP,
         },
-        status_code=400,
+        status_code=status_code,
     )
+
+
+def _admin_again(request: Request, app: FastAPI, session: dict, error: str) -> HTMLResponse:
+    return _admin_page(request, app, session, "", error, status_code=400)
 
 
 def _locked_out(ip: str) -> bool:

@@ -76,8 +76,45 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     install = client.get("/install")
     assert install.status_code == 200
     assert 'href="/admin"' not in install.text
-    assert "YAVER_BASE_DIR=/var/tmp/yaver" in install.text
-    assert "yaver.exe" in install.text
+    assert "Install zip" not in install.text
+    assert "cannot reach this IP" not in install.text
+    assert "Run this site" not in install.text
+    assert "install-dashboard" not in install.text
+    assert "Settings, then Runtime" not in install.text
+    assert "http://testserver/download/windows" in install.text
+    assert "http://testserver/download/ubuntu-22.04" in install.text
+    assert "curl.exe -fL" in install.text
+    assert "tar.exe -xf yaver-windows.zip -C yaver" in install.text
+    assert install.text.count("<details") == 5
+    assert install.text.count("<h3>Install</h3>") == 5
+    assert install.text.count("<h3>Update</h3>") == 5
+    assert install.text.count("setsid nohup ./yaver start") == 4
+    assert install.text.count("nano .env") == 5
+    assert "notepad .env" in install.text
+    assert install.text.count("./yaver update") == 4
+    windows_at = install.text.index('id="windows"')
+    windows_update = install.text.index(".\\yaver.exe update")
+    ubuntu18 = install.text.index('id="ubuntu-18.04"')
+    ubuntu22 = install.text.index('id="ubuntu-22.04"')
+    ubuntu24 = install.text.index('id="ubuntu-24.04"')
+    assert windows_at < windows_update < ubuntu18 < ubuntu22 < ubuntu24
+    ubuntu22_block = install.text[ubuntu22:ubuntu24]
+    assert "unzip -o /tmp/yaver-22.04.zip" in ubuntu22_block
+    assert "nano .env" in ubuntu22_block
+    assert "./yaver update" in ubuntu22_block
+    assert "yaver-18.04.zip" not in ubuntu22_block
+    assert "Start again later" not in install.text
+    assert "Start-Process" not in install.text
+    assert "&lt; /dev/null" in install.text
+    assert "< /dev/null" not in install.text
+    assert "unzip -o /tmp/yaver-22.04.zip" in install.text
+    assert ".\\yaver.exe update" in install.text
+    assert "./yaver update" in install.text
+    assert "--host" not in install.text
+    assert "--port" not in install.text
+    assert "Copy-Item .env.example .env" in install.text
+    assert "Update from Settings" not in home.text
+    assert "yaver update" in home.text
 
 
 def test_flatten_wrapper_removes_one_folder_and_keeps_a_flat_zip(tmp_path: Path):
@@ -375,3 +412,64 @@ def test_login_without_a_password_configured(tmp_path: Path):
     )
     assert failed.status_code == 400
     assert "YAVER_RELEASE_ADMIN_PASSWORD" in failed.text
+
+
+def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
+    from yaver_releases.copy import DEFAULTS, render_copy, fill
+
+    escaped = render_copy(fill('curl {windows}\n<script>\n[bad](javascript:alert(1))', {"windows": "http://x/<script>"}))
+    assert "<script>" not in escaped
+    assert "&lt;script&gt;" in escaped
+    assert 'href="javascript:' not in escaped
+    assert "http://x/&lt;script&gt;" in escaped
+
+    client = _client(tmp_path)
+    denied = client.post("/admin/copy", data={"home_intro": "nope", "csrf": "nope"})
+    assert denied.status_code == 403
+
+    _sign_in(client)
+    admin = client.get("/admin")
+    assert admin.status_code == 200
+    assert "Page text" in admin.text
+    assert "Save page text" in admin.text
+    token = _csrf(admin.text)
+    custom = "Office copy <script>alert(1)</script> [bad](javascript:alert(1))"
+    saved = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token, "home_intro": custom, "install_intro": "Custom install line."},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/admin?saved=text"
+    home = client.get("/")
+    assert "Office copy" in home.text
+    assert "<script>alert" not in home.text
+    assert "&lt;script&gt;" in home.text
+    assert 'href="javascript:' not in home.text
+    install = client.get("/install")
+    assert "Custom install line." in install.text
+    assert "Open this page from the address" not in install.text
+
+    admin = client.get(saved.headers["location"])
+    assert "Saved the page text." in admin.text
+    token = _csrf(admin.text)
+    too_long = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token, "home_intro": "x" * 20001},
+    )
+    assert too_long.status_code == 400
+    assert "20000" in too_long.text
+    assert "Office copy" in client.get("/").text
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    reset = client.post(
+        "/admin/copy/reset",
+        data={"csrf": token},
+        follow_redirects=False,
+    )
+    assert reset.status_code == 303
+    install = client.get("/install")
+    assert "Open this page from the address" in install.text
+    assert "Custom install line." not in install.text
+    assert "Restored the original page text." in client.get(reset.headers["location"]).text

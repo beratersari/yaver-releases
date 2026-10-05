@@ -2,7 +2,9 @@
 
 A small site for the office network. It shows the current Yaver packages, explains how to install them, and lets an admin upload a new Windows zip and one zip for each Ubuntu version.
 
-Yaver reads this site from Settings. Update closes Yaver, downloads the package for that computer, and starts Yaver again with the same `.env` and data folder.
+Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT`. Stop Yaver, then run `yaver update` (Windows: `yaver.exe update`). The command reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`, downloads the package for that computer, and starts Yaver again with the same `.env` and data folder.
+
+The releases page and the install page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
 
 ## Run
 
@@ -39,10 +41,7 @@ Publish one zip per platform:
 | Ubuntu 22.04 | Ubuntu 22.04 |
 | Ubuntu 24.04 | Ubuntu 24.04 |
 
-Upload the same kind of package those PCs already run.
-
-- An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip.
-- An install zip has `src/daemon.py` and `VERSION` at the top, plus `install-dashboard.bat` or `install-dashboard.sh`.
+Upload the executable those PCs already run. An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip. The install page tells people to download that zip, unpack it, and start the executable. It does not tell them to run an install-zip script.
 
 If the uploaded zip has a single folder around those files, the site removes that folder before it publishes. A download then opens onto the binary and the other files. The checksum on the site is the checksum of that published zip.
 
