@@ -19,6 +19,23 @@ PLATFORMS: dict[str, str] = {
     "ubuntu-24.04": "Ubuntu 24.04",
 }
 
+# Office downloads for the CLIs. These ids are not Yaver update targets.
+# ``yaver update`` only asks for a platform in ``PLATFORMS``.
+DEPENDENCIES: dict[str, str] = {
+    "opencode-windows": "OpenCode for Windows",
+    "opencode-linux": "OpenCode for Linux",
+    "claude-windows": "Claude Code for Windows",
+    "claude-linux": "Claude Code for Linux",
+    "codex-windows": "Codex for Windows",
+    "codex-linux": "Codex for Linux",
+}
+
+
+def package_label(platform: str) -> str:
+    if platform in PLATFORMS:
+        return PLATFORMS[platform]
+    return DEPENDENCIES.get(platform, platform)
+
 _VERSION = re.compile(r"^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.]+)?$")
 _MAX_MEMBERS = 200_000
 _MAX_UNCOMPRESSED = 16 * 1024 * 1024 * 1024
@@ -176,7 +193,7 @@ def flatten_wrapper(path: Path) -> bool:
 
 
 def inspect_zip(path: Path) -> str:
-    """Return ``frozen``, ``source``, or ``unknown``. Reject unsafe zips."""
+    """Return ``frozen``, ``source``, ``cli``, or ``unknown``. Reject unsafe zips."""
     if not zipfile.is_zipfile(path):
         raise PackageError("The file is not a zip.")
     names: list[str] = []
@@ -218,4 +235,16 @@ def classify_members(names: list[str]) -> str:
         return "frozen"
     if has_source:
         return "source"
+    if _is_cli(joined):
+        return "cli"
     return "unknown"
+
+
+def _is_cli(names: set[str]) -> bool:
+    """One tool zip: its installer plus ``tool/tool`` or ``tool/tool.exe``."""
+    for tool in ("opencode", "claude", "codex"):
+        binary = f"{tool}/{tool}" in names or f"{tool}/{tool}.exe" in names
+        installer = f"install-{tool}.sh" in names or f"install-{tool}.bat" in names
+        if binary and installer:
+            return True
+    return False

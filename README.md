@@ -1,6 +1,6 @@
 # Yaver releases
 
-A small site for the office network. It shows the current Yaver packages, explains how to install them, and lets an admin upload a new Windows zip and one zip for each Ubuntu version.
+A small site for the office network. The releases page lists the current Yaver zips and the OpenCode, Claude Code, and Codex zips. The install page has the commands. An admin uploads a Windows zip, one zip for each Ubuntu version, and one zip for each of those tools on Windows and on Linux.
 
 Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT`. Stop Yaver, then run `yaver update` (Windows: `yaver.exe update`). The command reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`, downloads the package for that computer, and starts Yaver again with the same `.env` and data folder.
 
@@ -40,8 +40,14 @@ Publish one zip per platform:
 | Ubuntu 20.04 | Ubuntu 20.04 |
 | Ubuntu 22.04 | Ubuntu 22.04 |
 | Ubuntu 24.04 | Ubuntu 24.04 |
+| OpenCode for Windows | `opencode-windows` |
+| OpenCode for Linux | `opencode-linux` |
+| Claude Code for Windows | `claude-windows` |
+| Claude Code for Linux | `claude-linux` |
+| Codex for Windows | `codex-windows` |
+| Codex for Linux | `codex-linux` |
 
-Upload the executable those PCs already run. An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip. The install page tells people to download that zip, unpack it, and start the executable. It does not tell them to run an install-zip script.
+Upload the executable those PCs already run. A dependency zip is one CLI: its installer, the binary, the host config, and a `VERSION` file with that tool's version. `yaver update` does not download these. `GET /api/latest` accepts only the five Yaver platforms above. An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip. The install page tells people to download that zip, unpack it, and start the executable. It does not tell them to run an install-zip script.
 
 If the uploaded zip has a single folder around those files, the site removes that folder before it publishes. A download then opens onto the binary and the other files. The checksum on the site is the checksum of that published zip.
 
@@ -71,7 +77,7 @@ A PC running the executable will not install a full install zip, and a full inst
 
 `layout` is `frozen` for the executable, `source` for the install zip, or `unknown` when the zip is neither. Yaver refuses an unknown zip.
 
-`GET /download/windows` sends the file. Yaver always downloads that path. It does not follow a redirect.
+`GET /download/windows` sends the file. Yaver always downloads that path. It does not follow a redirect. `GET /download/opencode-windows` (and the other dependency ids) sends that CLI zip. `GET /api/releases` includes a `dependencies` list beside `releases`.
 
 ## Tests
 

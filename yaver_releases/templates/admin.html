@@ -3,7 +3,7 @@
 {% block body %}
 <p class="kicker">Admin</p>
 <h1>Publish a release</h1>
-<p class="lede">Upload the executable zip your colleagues should install. One file is current for each platform. Uploading again replaces it. The zip lists <code>yaver.exe</code> or <code>yaver</code> next to <code>_internal</code> at the top. A zip that contains only one folder is published without that folder.</p>
+<p class="lede">Upload the executable zip your colleagues should install. One file is current for each platform. Uploading again replaces it. The zip lists <code>yaver.exe</code> or <code>yaver</code> next to <code>_internal</code> at the top. A zip that contains only one folder is published without that folder. Dependency zips are separate: one tool, with a <code>VERSION</code> file that is that tool's version. Yaver update does not install those.</p>
 {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
@@ -11,9 +11,16 @@
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <label for="platform">Platform</label>
   <select id="platform" name="platform" required>
-    {% for key, label in platforms.items() %}
-    <option value="{{ key }}">{{ label }}</option>
-    {% endfor %}
+    <optgroup label="Yaver">
+      {% for key, label in platforms.items() %}
+      <option value="{{ key }}">{{ label }}</option>
+      {% endfor %}
+    </optgroup>
+    <optgroup label="Dependencies">
+      {% for key, label in dependency_platforms.items() %}
+      <option value="{{ key }}">{{ label }}</option>
+      {% endfor %}
+    </optgroup>
   </select>
   <label for="version">Version</label>
   <input id="version" name="version" inputmode="decimal" placeholder="0.9.72" autocomplete="off" aria-describedby="version-hint">
@@ -43,6 +50,40 @@
       <td>{{ row.label }}</td>
       <td>{{ row.version or "—" }}</td>
       <td>{{ row.layout|layout_label or "—" }}{% if row.layout == "unknown" %}. Machines will refuse this zip.{% endif %}</td>
+      <td>{% if row.filename %}{{ row.filename }} · {{ row.size|size }}{% else %}—{% endif %}</td>
+      <td>
+        {% if row.version %}
+        <form method="post" action="/admin/delete">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="platform" value="{{ row.platform }}">
+          <button class="danger" type="submit">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Dependency packages</h2>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Package</th>
+      <th>Version</th>
+      <th>Kind</th>
+      <th>File</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in dependency_rows %}
+    <tr>
+      <td>{{ row.label }}</td>
+      <td>{{ row.version or "—" }}</td>
+      <td>{{ row.layout|layout_label or "—" }}{% if row.layout == "unknown" %}. This zip is not a CLI package.{% endif %}</td>
       <td>{% if row.filename %}{{ row.filename }} · {{ row.size|size }}{% else %}—{% endif %}</td>
       <td>
         {% if row.version %}

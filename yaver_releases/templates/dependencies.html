@@ -1,0 +1,17 @@
+<div class="lede-block">
+  {{ sections.deps_intro }}
+</div>
+
+<div class="folds">
+  {% for item in dependencies %}
+  <details class="fold" id="{{ item.id }}">
+    <summary><h2>{{ item.label }}</h2></summary>
+    <div class="fold-body">
+      <h3>Windows</h3>
+      {{ sections[item.windows_copy] }}
+      <h3>Linux</h3>
+      {{ sections[item.linux_copy] }}
+    </div>
+  </details>
+  {% endfor %}
+</div>

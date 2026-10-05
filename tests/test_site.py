@@ -85,7 +85,37 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "http://testserver/download/ubuntu-22.04" in install.text
     assert "curl.exe -fL" in install.text
     assert "tar.exe -xf yaver-windows.zip -C yaver" in install.text
-    assert install.text.count("<details") == 5
+    assert install.text.count("<details") == 8
+    assert 'id="opencode"' in install.text
+    assert 'id="claude"' in install.text
+    assert 'id="codex"' in install.text
+    assert install.text.index('id="ubuntu-24.04"') < install.text.index('id="opencode"')
+    assert install.text.index('id="opencode"') < install.text.index('id="claude"')
+    assert install.text.index('id="claude"') < install.text.index('id="codex"')
+    assert "http://testserver/download/opencode-windows" in install.text
+    assert "http://testserver/download/opencode-linux" in install.text
+    assert "http://testserver/download/claude-windows" in install.text
+    assert "http://testserver/download/claude-linux" in install.text
+    assert "http://testserver/download/codex-windows" in install.text
+    assert "http://testserver/download/codex-linux" in install.text
+    assert ".\\install-opencode.bat" in install.text
+    assert "./install-opencode.sh" in install.text
+    assert ".\\install-claude.bat" in install.text
+    assert "./install-claude.sh" in install.text
+    assert ".\\install-codex.bat" in install.text
+    assert "./install-codex.sh" in install.text
+    assert "OpenCode for Windows" in home.text
+    assert "Claude Code for Linux" in home.text
+    assert "Codex for Windows" in home.text
+    assert "install-opencode.bat" not in home.text
+    assert "install-claude.sh" not in home.text
+    assert "install-codex.bat" not in home.text
+    assert "/download/opencode-windows" not in home.text
+    assert "<details" not in home.text
+    assert "Windows package is not published yet." not in home.text
+    assert "Windows package is not published yet." not in install.text
+    assert install.text.count("<h3>Windows</h3>") == 3
+    assert install.text.count("<h3>Linux</h3>") == 3
     assert install.text.count("<h3>Install</h3>") == 5
     assert install.text.count("<h3>Update</h3>") == 5
     assert install.text.count("setsid nohup ./yaver start") == 4
@@ -177,6 +207,65 @@ def test_classify_executable_source_and_wrapped_folder():
     ) == "frozen"
     assert classify_members(["src/daemon.py", "VERSION", "install-dashboard.sh"]) == "source"
     assert classify_members(["readme.txt"]) == "unknown"
+    assert classify_members(
+        [
+            "install-opencode.bat",
+            "Backup-CliBinary.ps1",
+            "opencode/opencode.exe",
+            "opencode/opencode.json",
+            "VERSION",
+        ]
+    ) == "cli"
+    assert classify_members(
+        ["tool/install-claude.sh", "tool/lib.sh", "tool/claude/claude", "tool/VERSION"]
+    ) == "cli"
+    assert classify_members(
+        ["install-codex.sh", "codex/codex", "codex/config.toml", "VERSION"]
+    ) == "cli"
+
+
+def test_a_cli_zip_is_a_dependency_and_not_a_yaver_update(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    admin = client.get("/admin")
+    assert 'value="opencode-windows"' in admin.text
+    assert "OpenCode for Windows" in admin.text
+    token = _csrf(admin.text)
+    payload = _zip(
+        {
+            "install-opencode.bat": "@echo off\r\n",
+            "Backup-CliBinary.ps1": "# backup\n",
+            "opencode/opencode.exe": "bin",
+            "opencode/opencode.json": "{}\n",
+            "VERSION": "1.18.10\n",
+        }
+    )
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "opencode-windows", "version": "", "csrf": token},
+        files={"package": ("opencode-windows.zip", payload, "application/zip")},
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    assert client.get("/api/latest?platform=opencode-windows").status_code == 404
+    catalog = client.get("/api/releases").json()
+    row = next(item for item in catalog["dependencies"] if item["platform"] == "opencode-windows")
+    assert row["version"] == "1.18.10"
+    assert row["layout"] == "cli"
+    assert row["download_path"] == "/download/opencode-windows"
+    assert all(item["platform"] != "opencode-windows" for item in catalog["releases"])
+    downloaded = client.get("/download/opencode-windows")
+    assert downloaded.status_code == 200
+    home = client.get("/")
+    assert "1.18.10" in home.text
+    assert "Command-line tool" in home.text
+    assert 'href="/download/opencode-windows"' in home.text
+    assert "install-opencode.bat" not in home.text
+    install = client.get("/install")
+    assert ".\\install-opencode.bat" in install.text
+    assert "1.18.10" not in install.text
+    assert "Command-line tool" not in install.text
+    assert client.get("/api/latest?platform=windows").status_code == 404
 
 
 def test_upload_requires_login_and_then_publishes(tmp_path: Path):

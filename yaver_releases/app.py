@@ -33,10 +33,12 @@ from yaver_releases.copy import (
     tokens_from_url,
 )
 from yaver_releases.platforms import (
+    DEPENDENCIES,
     PLATFORMS,
     PackageError,
     flatten_wrapper,
     inspect_zip,
+    package_label,
     require_version,
     safe_filename,
     version_from_zip,
@@ -66,6 +68,7 @@ def _layout_label(value: object) -> str:
     return {
         "frozen": "Executable",
         "source": "Install zip",
+        "cli": "Command-line tool",
         "unknown": "Unrecognized",
     }.get(str(value or ""), "")
 
@@ -118,7 +121,10 @@ def create_app(
 
     @app.get("/api/releases")
     def releases() -> dict:
-        return {"releases": store.list_all()}
+        return {
+            "releases": store.list_all(),
+            "dependencies": store.list_dependencies(),
+        }
 
     @app.get("/api/latest")
     def latest(platform: str = "") -> dict:
@@ -130,11 +136,14 @@ def create_app(
 
     @app.get("/download/{platform}")
     def download(platform: str) -> FileResponse:
-        key = _platform_or_404(platform)
+        key = _package_or_404(platform)
         row = store.get(key)
         path = store.blob_path(key)
         if row is None or path is None:
-            raise HTTPException(status_code=404, detail=f"No {PLATFORMS[key]} release is published.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {package_label(key)} release is published.",
+            )
         return FileResponse(
             path,
             media_type="application/zip",
@@ -147,7 +156,7 @@ def create_app(
         return _TEMPLATES.TemplateResponse(
             request,
             "home.html",
-            {"releases": store.list_all(), "sections": _public_sections(request, store)},
+            _public_context(request, store),
         )
 
     @app.get("/install", response_class=HTMLResponse)
@@ -155,7 +164,7 @@ def create_app(
         return _TEMPLATES.TemplateResponse(
             request,
             "install.html",
-            {"releases": store.list_all(), "sections": _public_sections(request, store)},
+            _public_context(request, store),
         )
 
     @app.get("/admin/login", response_class=HTMLResponse)
@@ -219,7 +228,7 @@ def create_app(
     ):
         session = _require_admin(request, app, csrf)
         try:
-            key = _platform_or_404(platform)
+            key = _package_or_404(platform)
             typed = require_version(version) if (version or "").strip() else ""
             filename = safe_filename(package.filename or "")
             note = _clean_notes(notes)
@@ -282,7 +291,7 @@ def create_app(
     @app.post("/admin/delete")
     def delete(request: Request, platform: str = Form(""), csrf: str = Form("")):
         _require_admin(request, app, csrf)
-        key = _platform_or_404(platform)
+        key = _package_or_404(platform)
         store.delete(key)
         return RedirectResponse("/admin", status_code=303)
 
@@ -309,8 +318,16 @@ def create_app(
 
 
 def _platform_or_404(value: str) -> str:
+    """Yaver update targets only. A CLI id is not a platform."""
     key = (value or "").strip().lower()
     if key not in PLATFORMS:
+        raise HTTPException(status_code=404, detail="Unknown platform.")
+    return key
+
+
+def _package_or_404(value: str) -> str:
+    key = (value or "").strip().lower()
+    if key not in PLATFORMS and key not in DEPENDENCIES:
         raise HTTPException(status_code=404, detail="Unknown platform.")
     return key
 
@@ -378,13 +395,39 @@ def _login_page(request: Request, app: FastAPI, error: str) -> HTMLResponse:
 
 
 def _notice_for(uploaded: str, saved: str) -> str:
-    if uploaded in PLATFORMS:
-        return f"Published the {PLATFORMS[uploaded]} package."
+    if uploaded in PLATFORMS or uploaded in DEPENDENCIES:
+        return f"Published the {package_label(uploaded)} package."
     if saved == "text":
         return "Saved the page text."
     if saved == "reset":
         return "Restored the original page text."
     return ""
+
+
+def _dependency_groups() -> list[dict]:
+    specs = (
+        ("opencode", "OpenCode", "opencode_windows", "opencode_linux"),
+        ("claude", "Claude Code", "claude_windows", "claude_linux"),
+        ("codex", "Codex", "codex_windows", "codex_linux"),
+    )
+    return [
+        {
+            "id": tool,
+            "label": label,
+            "windows_copy": windows_copy,
+            "linux_copy": linux_copy,
+        }
+        for tool, label, windows_copy, linux_copy in specs
+    ]
+
+
+def _public_context(request: Request, store: ReleaseStore) -> dict:
+    return {
+        "releases": store.list_all(),
+        "dependency_rows": store.list_dependencies(),
+        "dependencies": _dependency_groups(),
+        "sections": _public_sections(request, store),
+    }
 
 
 def _public_sections(request: Request, store: ReleaseStore):
@@ -412,7 +455,9 @@ def _admin_page(
         "admin.html",
         {
             "releases": app.state.store.list_all(),
+            "dependency_rows": app.state.store.list_dependencies(),
             "platforms": PLATFORMS,
+            "dependency_platforms": DEPENDENCIES,
             "csrf": session["csrf"],
             "notice": notice,
             "error": error,

@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from markupsafe import Markup, escape
 
 _MAX_CHARS = 20_000
-_TOKEN = re.compile(r"\{([a-z0-9]+)\}")
+_TOKEN = re.compile(r"\{([a-z0-9_]+)\}")
 _INLINE = re.compile(r"`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)")
 
 # Order is the order of the admin form and the public pages.
@@ -28,6 +28,13 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("ubuntu22", "Ubuntu 22.04", "Install"),
     ("ubuntu24", "Ubuntu 24.04", "Install"),
     ("ubuntu_update", "Ubuntu update, shown in each version", "Install"),
+    ("deps_intro", "Dependencies introduction", "Install"),
+    ("opencode_windows", "OpenCode on Windows", "Install"),
+    ("opencode_linux", "OpenCode on Linux", "Install"),
+    ("claude_windows", "Claude Code on Windows", "Install"),
+    ("claude_linux", "Claude Code on Linux", "Install"),
+    ("codex_windows", "Codex on Windows", "Install"),
+    ("codex_linux", "Codex on Linux", "Install"),
 )
 
 TOKEN_HELP: tuple[tuple[str, str], ...] = (
@@ -37,6 +44,12 @@ TOKEN_HELP: tuple[tuple[str, str], ...] = (
     ("{ubuntu20}", "Ubuntu 20.04 zip"),
     ("{ubuntu22}", "Ubuntu 22.04 zip"),
     ("{ubuntu24}", "Ubuntu 24.04 zip"),
+    ("{opencode_windows}", "OpenCode for Windows"),
+    ("{opencode_linux}", "OpenCode for Linux"),
+    ("{claude_windows}", "Claude Code for Windows"),
+    ("{claude_linux}", "Claude Code for Linux"),
+    ("{codex_windows}", "Codex for Windows"),
+    ("{codex_linux}", "Codex for Linux"),
 )
 
 def _ubuntu_steps(version: str, token: str) -> str:
@@ -74,8 +87,8 @@ DEFAULTS: dict[str, str] = {
     "install_intro": (
         "Open this page from the address the other computers use, then copy "
         "the commands. Everyone installs the executable. The commands "
-        "download that zip, unpack it, and start Yaver. OpenCode and Codex "
-        "are not inside the executable."
+        "download that zip, unpack it, and start Yaver. OpenCode, Claude Code, "
+        "and Codex are separate downloads in Dependencies."
     ),
     "windows": """The zip contains `yaver.exe`, a folder named `_internal`, and `.env.example`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
 
@@ -127,6 +140,90 @@ chmod 755 ./yaver
 ./yaver update
 ```
 """,
+    "deps_intro": (
+        "OpenCode, Claude Code, and Codex are not inside the Yaver executable. "
+        "Each tool is its own zip. Windows and Linux are separate files. Edit "
+        "`YOUR_HOST` in that tool's config, then run its install command. "
+        "These zips do not include agents. After Yaver is installed, "
+        "`install-agents.bat` or `install-agents.sh` from the Yaver package "
+        "copies the agents. The Linux commands use `unzip` and `nano`. If "
+        "either is missing, run `sudo apt-get install -y unzip nano` once."
+    ),
+    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The install command copies the CLI to `%USERPROFILE%\.opencode\bin` and adds that folder to your user PATH. Open a new terminal afterward.
+
+PowerShell:
+
+```
+curl.exe -fL -o opencode-windows.zip "{opencode_windows}"
+New-Item -ItemType Directory -Force -Path opencode | Out-Null
+tar.exe -xf opencode-windows.zip -C opencode
+cd opencode
+notepad opencode\opencode.json
+.\install-opencode.bat
+```
+""",
+    "opencode_linux": r"""The zip contains `install-opencode.sh`, the `opencode` binary, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The script copies the CLI to `~/.opencode/bin` when OpenCode is not already on PATH.
+
+```
+mkdir -p "$HOME/opencode"
+curl -fL -o /tmp/opencode-linux.zip "{opencode_linux}"
+unzip -o /tmp/opencode-linux.zip -d "$HOME/opencode"
+cd "$HOME/opencode"
+chmod 755 install-opencode.sh opencode/opencode
+nano opencode/opencode.json
+./install-opencode.sh
+```
+""",
+    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The install command copies the CLI to `%USERPROFILE%\.local\bin` and the config to `%USERPROFILE%\.claude\settings.json`. Open a new terminal afterward.
+
+PowerShell:
+
+```
+curl.exe -fL -o claude-windows.zip "{claude_windows}"
+New-Item -ItemType Directory -Force -Path claude | Out-Null
+tar.exe -xf claude-windows.zip -C claude
+cd claude
+notepad claude\settings.json
+.\install-claude.bat
+```
+""",
+    "claude_linux": r"""The zip contains `install-claude.sh`, the `claude` binary, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The script copies the CLI next to an existing `claude` on PATH, or into `~/.local/bin` on a first install.
+
+```
+mkdir -p "$HOME/claude"
+curl -fL -o /tmp/claude-linux.zip "{claude_linux}"
+unzip -o /tmp/claude-linux.zip -d "$HOME/claude"
+cd "$HOME/claude"
+chmod 755 install-claude.sh claude/claude
+nano claude/settings.json
+./install-claude.sh
+```
+""",
+    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The install command copies the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` and the config to `%USERPROFILE%\.codex\config.toml`. Open a new terminal afterward.
+
+PowerShell:
+
+```
+curl.exe -fL -o codex-windows.zip "{codex_windows}"
+New-Item -ItemType Directory -Force -Path codex | Out-Null
+tar.exe -xf codex-windows.zip -C codex
+cd codex
+notepad codex\config.toml
+.\install-codex.bat
+```
+""",
+    "codex_linux": r"""The zip contains `install-codex.sh`, the `codex` binary, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The script copies the CLI next to an existing `codex` on PATH, or into `~/.local/bin` on a first install.
+
+```
+mkdir -p "$HOME/codex"
+curl -fL -o /tmp/codex-linux.zip "{codex_linux}"
+unzip -o /tmp/codex-linux.zip -d "$HOME/codex"
+cd "$HOME/codex"
+chmod 755 install-codex.sh codex/codex
+nano codex/config.toml
+./install-codex.sh
+```
+""",
 }
 
 
@@ -153,7 +250,13 @@ def sections_for_edit(
                 "label": label,
                 "page": page,
                 "body": body,
-                "tall": key not in {"home_intro", "home_update", "install_intro", "ubuntu_intro"},
+                "tall": key not in {
+                    "home_intro",
+                    "home_update",
+                    "install_intro",
+                    "ubuntu_intro",
+                    "deps_intro",
+                },
             }
         )
     return rows
@@ -201,6 +304,12 @@ def tokens_from_url(base_url: str, host: str, port: int | None, scheme: str) -> 
         "ubuntu20": f"{base}/download/ubuntu-20.04",
         "ubuntu22": f"{base}/download/ubuntu-22.04",
         "ubuntu24": f"{base}/download/ubuntu-24.04",
+        "opencode_windows": f"{base}/download/opencode-windows",
+        "opencode_linux": f"{base}/download/opencode-linux",
+        "claude_windows": f"{base}/download/claude-windows",
+        "claude_linux": f"{base}/download/claude-linux",
+        "codex_windows": f"{base}/download/codex-windows",
+        "codex_linux": f"{base}/download/codex-linux",
     }
 
 

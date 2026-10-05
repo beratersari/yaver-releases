@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from yaver_releases.platforms import PLATFORMS
+from yaver_releases.platforms import DEPENDENCIES, PLATFORMS, package_label
 
 
 def _now() -> str:
@@ -70,14 +70,25 @@ class ReleaseStore:
                 "SELECT * FROM releases ORDER BY platform"
             ).fetchall()
         by_platform = {row["platform"]: row for row in rows}
+        return self._catalog(PLATFORMS, by_platform)
+
+    def list_dependencies(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM releases ORDER BY platform"
+            ).fetchall()
+        by_platform = {row["platform"]: row for row in rows}
+        return self._catalog(DEPENDENCIES, by_platform)
+
+    def _catalog(self, labels: dict[str, str], by_platform: dict) -> list[dict]:
         out: list[dict] = []
-        for platform in PLATFORMS:
+        for platform, label in labels.items():
             row = by_platform.get(platform)
             if row is None:
                 out.append(
                     {
                         "platform": platform,
-                        "label": PLATFORMS[platform],
+                        "label": label,
                         "version": "",
                         "filename": "",
                         "sha256": "",
@@ -201,7 +212,7 @@ class ReleaseStore:
         platform = str(row["platform"])
         return {
             "platform": platform,
-            "label": PLATFORMS.get(platform, platform),
+            "label": package_label(platform),
             "version": str(row["version"]),
             "filename": str(row["filename"]),
             "sha256": str(row["sha256"]),
