@@ -1,25 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Yaver releases{% endblock %}
 {% block body %}
+<p class="kicker">Office releases</p>
 <h1>Yaver</h1>
 <p class="lede">Yaver runs OpenCode agents for work that arrives from Jira, GitLab, or Azure DevOps. This page is the copy your office downloads, so a new release does not have to come from the public internet one PC at a time.</p>
 <p>Pick the package that matches the computer. Windows is one package. Each Ubuntu release is its own package, because the executable build is tied to that Ubuntu version.</p>
 
-<div class="cards">
+<p class="kicker">Packages</p>
+<section class="cards" aria-label="Packages">
   {% for row in releases %}
-  <article class="card">
-    <h2>{{ row.label }}</h2>
+  <article class="card{% if row.platform == 'windows' %} card-lead{% endif %}{% if not row.version %} is-empty{% endif %}">
+    <div class="copy">
+      <p class="eyebrow">{{ row.platform }}</p>
+      <h2>{{ row.label }}</h2>
+      {% if row.version %}
+        <p class="version">{{ row.version }}</p>
+        <p class="meta">
+          {% if row.layout %}<span class="tag">{{ row.layout|layout_label }}</span>{% endif %}
+          <span>{{ row.size|size }}</span>
+          {% if row.published_at %}<span>Published {{ row.published_at[:10] }}</span>{% endif %}
+        </p>
+        {% if row.notes %}<p class="notes">{{ row.notes }}</p>{% endif %}
+      {% else %}
+        <p class="quiet">Not published yet.</p>
+      {% endif %}
+    </div>
     {% if row.version %}
-      <p class="meta">Version {{ row.version }} · {{ row.size|size }}{% if row.layout %} · {{ row.layout|layout_label }}{% endif %}</p>
-      {% if row.notes %}<p>{{ row.notes }}</p>{% endif %}
-      <a class="button" href="{{ row.download_path }}">Download</a>
-    {% else %}
-      <p class="meta">Not published yet.</p>
+    <a class="button" href="{{ row.download_path }}">Download</a>
     {% endif %}
   </article>
   {% endfor %}
-</div>
+</section>
 
-<h2>Install, then update from Settings</h2>
-<p>The first install is on the <a href="/install">install page</a>. After that, each person opens Yaver, goes to Settings, then Runtime, and sets this server’s address and port. Update closes Yaver, fetches the package for that computer, and starts Yaver again. The <code>.env</code> file and the data folder stay.</p>
+<section class="panel">
+  <p class="kicker">After the first install</p>
+  <h2>Update from Settings</h2>
+  <p>The first install is on the <a href="/install">install page</a>. After that, each person opens Yaver, goes to Settings, then Runtime, and sets this server’s address and port. Update closes Yaver, fetches the package for that computer, and starts Yaver again. The <code>.env</code> file and the data folder stay.</p>
+</section>
 {% endblock %}

@@ -4,20 +4,61 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#07090d">
   <title>{% block title %}Yaver releases{% endblock %}</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/site.css">
+  <script>
+    (function () {
+      var theme = "dark";
+      try {
+        if (localStorage.getItem("yaver.theme") === "light") theme = "light";
+      } catch (err) {}
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+    })();
+  </script>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/">Yaver releases</a>
-    <nav>
-      <a href="/">Releases</a>
-      <a href="/install">Install</a>
-      <a href="/admin">Admin</a>
-    </nav>
-  </header>
-  <main>
-    {% block body %}{% endblock %}
-  </main>
+  {% set path = request.url.path %}
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <button type="button" class="theme" id="theme" role="switch" aria-checked="true" aria-label="Switch to light theme" title="Light theme">
+          <svg class="moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M9.1 1.8a5.4 5.4 0 1 0 5.1 7.2A4.5 4.5 0 1 1 9.1 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          <svg class="sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.3" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 1.7v1.5M8 12.8v1.5M1.7 8h1.5M12.8 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <a class="brand-link" href="/">
+          <span class="mark"><img src="/static/yaver-wink.gif" alt="" width="64" height="64"></span>
+          <span>
+            <span class="brand-name">Yaver</span>
+            <span class="brand-sub">LAN releases</span>
+          </span>
+        </a>
+      </div>
+      <nav aria-label="Primary">
+        <a href="/" class="{% if path == '/' %}active{% endif %}" {% if path == '/' %}aria-current="page"{% endif %}>
+          <span class="idx">01</span>
+          <span>Releases</span>
+        </a>
+        <a href="/install" class="{% if path == '/install' %}active{% endif %}" {% if path == '/install' %}aria-current="page"{% endif %}>
+          <span class="idx">02</span>
+          <span>Install</span>
+        </a>
+      </nav>
+      <p class="side-foot">Downloads stay open on this network.</p>
+    </aside>
+    <main>
+      <div class="page">
+        {% block body %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  <script src="/static/theme.js"></script>
 </body>
 </html>
