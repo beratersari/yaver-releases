@@ -17,16 +17,16 @@ copy .env.example .env
 
 On Linux, use `python3`, `.venv/bin/pip`, and `.venv/bin/python`. `serve.bat` and `serve.sh` start it the same way when `.venv` already exists.
 
-The Windows release is a single file, `yaver-releases.exe`. Put that file in this folder, next to `.env` and `data`, and start it. It reads those two from the folder that contains the executable, then listens on the same address as the Python command above. Stop the other copy first when port 8090 is already in use. The executable does not contain `.env` or the admin password. Published zips stay in `data`.
+The Windows release is a zip, laid out the same way as a Yaver executable zip. Extract it and the folder contains `yaver-releases.exe`, `_internal`, `.env.example`, `START_HERE.txt`, and `VERSION`. Copy `.env.example` to `.env`, set the admin user and password, and start `yaver-releases.exe`. The site reads `.env` and `data` from that folder. Stop the other copy first when port 8090 is already in use. The zip does not contain a filled `.env` or the admin password.
 
-Build that file from this repository on Windows:
+Build that zip from this repository on Windows:
 
 ```bat
 .venv\Scripts\pip install pyinstaller
-.venv\Scripts\python -m PyInstaller packaging\pyinstaller\yaver-releases.spec --noconfirm --distpath dist --workpath build
+.venv\Scripts\python packaging\pyinstaller\build.py
 ```
 
-The built file is `dist\yaver-releases.exe`.
+The zip is `dist\yaver-releases-windows-x64-1.0.0.zip`. Its root is the executable and the files next to it. The folder name is not inside the zip.
 
 The site listens on `0.0.0.0:8090` unless `YAVER_RELEASE_HOST` and `YAVER_RELEASE_PORT` say otherwise. Open `http://127.0.0.1:8090`.
 

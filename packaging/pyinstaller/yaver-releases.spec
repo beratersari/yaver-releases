@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""One file Windows executable for the office release site.
+"""Onedir freeze of the office release site.
 
-``.env`` and ``data`` stay next to the executable. They are not packed
-inside it. onefile is intentional: the operator runs this one file.
+The zip is built by packaging/pyinstaller/build.py. Its root is the
+executable, _internal, .env.example, START_HERE.txt, and VERSION.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(SPECDIR / "runtime_hook.py")],
     excludes=excludes,
     noarchive=False,
     optimize=0,
@@ -105,20 +105,27 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="yaver-releases",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="yaver-releases",
 )

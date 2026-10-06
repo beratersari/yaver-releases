@@ -6,4 +6,5 @@ __pycache__/
 *.pyc
 build/
 dist/
+_internal/
 yaver-releases.exe

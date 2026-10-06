@@ -1,0 +1,16 @@
+Yaver releases
+==============
+
+This folder is the office release site.
+
+1. Copy .env.example to .env
+2. Edit .env. Set YAVER_RELEASE_ADMIN_USER and
+   YAVER_RELEASE_ADMIN_PASSWORD. There is no default password.
+3. Start:
+
+   Windows:  yaver-releases.exe
+
+4. Open http://127.0.0.1:8090
+
+Published packages are stored in the data folder next to this
+executable. Secrets stay in .env. They are not inside this zip.
