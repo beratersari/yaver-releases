@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from yaver_releases import paths
+
 
 def load_dotenv(path: Path | None = None) -> None:
-    dest = path or (Path.cwd() / ".env")
+    dest = path if path is not None else paths.install_dir() / ".env"
     if not dest.is_file():
         return
     try:

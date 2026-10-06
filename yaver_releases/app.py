@@ -32,6 +32,7 @@ from yaver_releases.copy import (
     sections_for_edit,
     tokens_from_url,
 )
+from yaver_releases import paths
 from yaver_releases.platforms import (
     DEPENDENCIES,
     PLATFORMS,
@@ -86,7 +87,7 @@ def create_app(
     admin_password: str | None = None,
     secret: str | None = None,
 ) -> FastAPI:
-    root = Path(data_dir or os.environ.get("YAVER_RELEASE_DATA") or "data")
+    root = paths.data_dir(data_dir)
     root.mkdir(parents=True, exist_ok=True)
     store = ReleaseStore(root)
     user = admin_user if admin_user is not None else os.environ.get("YAVER_RELEASE_ADMIN_USER", "")

@@ -562,3 +562,37 @@ def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
     assert "Open this page from the address" in install.text
     assert "Custom install line." not in install.text
     assert "Restored the original page text." in client.get(reset.headers["location"]).text
+
+
+def test_source_run_keeps_data_in_the_working_directory(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("YAVER_RELEASE_DATA", raising=False)
+    app = create_app()
+    assert app.state.store.root == tmp_path / "data"
+
+
+def test_relative_data_dir_stays_next_to_the_executable(tmp_path: Path, monkeypatch):
+    exe_dir = tmp_path / "install"
+    exe_dir.mkdir()
+    monkeypatch.setattr("yaver_releases.paths.install_dir", lambda: exe_dir)
+    monkeypatch.setenv("YAVER_RELEASE_DATA", "kept")
+    app = create_app()
+    assert app.state.store.root == exe_dir / "kept"
+
+
+def test_absolute_data_dir_is_unchanged(tmp_path: Path, monkeypatch):
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv("YAVER_RELEASE_DATA", str(other))
+    app = create_app()
+    assert app.state.store.root == other
+
+
+def test_dotenv_reads_the_file_next_to_the_executable(tmp_path: Path, monkeypatch):
+    exe_dir = tmp_path / "install"
+    exe_dir.mkdir()
+    (exe_dir / ".env").write_text("YAVER_RELEASE_PORT=18091\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("YAVER_RELEASE_PORT", raising=False)
+    monkeypatch.setattr("yaver_releases.paths.install_dir", lambda: exe_dir)
+    load_dotenv()
+    assert os.environ["YAVER_RELEASE_PORT"] == "18091"

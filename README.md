@@ -17,6 +17,17 @@ copy .env.example .env
 
 On Linux, use `python3`, `.venv/bin/pip`, and `.venv/bin/python`. `serve.bat` and `serve.sh` start it the same way when `.venv` already exists.
 
+The Windows release is a single file, `yaver-releases.exe`. Put that file in this folder, next to `.env` and `data`, and start it. It reads those two from the folder that contains the executable, then listens on the same address as the Python command above. Stop the other copy first when port 8090 is already in use. The executable does not contain `.env` or the admin password. Published zips stay in `data`.
+
+Build that file from this repository on Windows:
+
+```bat
+.venv\Scripts\pip install pyinstaller
+.venv\Scripts\python -m PyInstaller packaging\pyinstaller\yaver-releases.spec --noconfirm --distpath dist --workpath build
+```
+
+The built file is `dist\yaver-releases.exe`.
+
 The site listens on `0.0.0.0:8090` unless `YAVER_RELEASE_HOST` and `YAVER_RELEASE_PORT` say otherwise. Open `http://127.0.0.1:8090`.
 
 Set both `YAVER_RELEASE_ADMIN_USER` and `YAVER_RELEASE_ADMIN_PASSWORD` before the first login. There is no default password. Downloads stay open on the LAN. The password only protects the upload page. Open `/admin` to sign in. The download pages do not link to that page. Do not forward this port to the public internet.
