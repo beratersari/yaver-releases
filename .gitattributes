@@ -1,0 +1,2 @@
+yaver_releases/update_scripts/update.sh text eol=lf
+yaver_releases/update_scripts/update.bat text eol=crlf
