@@ -1,10 +1,10 @@
 # Yaver releases
 
-A small site for the office network. The releases page lists the current Yaver zips and the OpenCode, Claude Code, and Codex zips. The install page has the commands. An admin uploads a Windows zip, one zip for each Ubuntu version, and one zip for each of those tools on Windows and on Linux.
+A small site for the office network. Install is the first page. Release history lists each published version as its own section, with a download for Windows and for each Ubuntu version. OpenCode, Claude Code, and Codex are on the Dependencies page. An admin uploads one Yaver zip that contains the Windows zip and one zip for each Ubuntu version, plus one zip for each of those tools on Windows and on Linux. Colleagues still download each system on its own. A newer upload keeps the older version in the history. When the Yaver zip contains `RELEASE_NOTES.txt`, that text is the release note for the version.
 
-Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT`. Stop Yaver, then run `yaver update` (Windows: `yaver.exe update`). The command reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`, downloads the package for that computer, and starts Yaver again with the same `.env` and data folder.
+Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT` in the install `.env`. From the Yaver folder, run `update.bat` on Windows or `./update.sh` on Ubuntu. The script stops Yaver in that folder, downloads the package for that computer, and replaces the program files. `.env` and the script you ran stay. Start Yaver after the script finishes.
 
-The releases page and the install page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
+The install page, Release history, and the Dependencies page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
 
 ## Run
 
@@ -26,7 +26,7 @@ Build that zip from this repository on Windows:
 .venv\Scripts\python packaging\pyinstaller\build.py
 ```
 
-The zip is `dist\yaver-releases-windows-x64-1.0.0.zip`. Its root is the executable and the files next to it. The folder name is not inside the zip.
+The zip is `dist\yaver-releases-windows-x64-1.1.0.zip`. Its root is the executable and the files next to it. The folder name is not inside the zip.
 
 The site listens on `0.0.0.0:8090` unless `YAVER_RELEASE_HOST` and `YAVER_RELEASE_PORT` say otherwise. Open `http://127.0.0.1:8090`.
 
@@ -42,15 +42,23 @@ Ubuntu: `sudo ufw allow 8090/tcp`.
 
 ## What to upload
 
-Publish one zip per platform:
+Publish one Yaver zip. The files inside it are:
 
-| Platform | Who downloads it |
-|----------|------------------|
-| Windows | Windows PCs |
-| Ubuntu 18.04 | Ubuntu 18.04 |
-| Ubuntu 20.04 | Ubuntu 20.04 |
-| Ubuntu 22.04 | Ubuntu 22.04 |
-| Ubuntu 24.04 | Ubuntu 24.04 |
+| File inside the upload | Who downloads it |
+|------------------------|------------------|
+| `yaver-windows-x64-0.9.79.zip` | Windows PCs |
+| `yaver-linux-x64-ubuntu-18.04-0.9.79.zip` | Ubuntu 18.04 |
+| `yaver-linux-x64-ubuntu-20.04-0.9.79.zip` | Ubuntu 20.04 |
+| `yaver-linux-x64-ubuntu-22.04-0.9.79.zip` | Ubuntu 22.04 |
+| `yaver-linux-x64-ubuntu-24.04-0.9.79.zip` | Ubuntu 24.04 |
+| `RELEASE_NOTES.txt` | Release history, under that version |
+
+The version in this example is `0.9.79`. Use the version that is in the file names. The form has no version field. A name such as `yaver-executables-0.9.79.zip` has to use that same version. All five zip files are required, and they have to share one version. `RELEASE_NOTES.txt` is optional. When it is present, its text is the release note and the notes box on the form is ignored. Release history shows that version as one collapsible section, with the note above the downloads. Each zip inside it stays its own download. The previous version stays in the history.
+
+Dependencies are still one zip each:
+
+| Package | Id |
+|---------|----|
 | OpenCode for Windows | `opencode-windows` |
 | OpenCode for Linux | `opencode-linux` |
 | Claude Code for Windows | `claude-windows` |
@@ -58,11 +66,11 @@ Publish one zip per platform:
 | Codex for Windows | `codex-windows` |
 | Codex for Linux | `codex-linux` |
 
-Upload the executable those PCs already run. A dependency zip is one CLI: its installer, the binary, the host config, and a `VERSION` file with that tool's version. `yaver update` does not download these. `GET /api/latest` accepts only the five Yaver platforms above. An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip. The install page tells people to download that zip, unpack it, and start the executable. It does not tell them to run an install-zip script.
+Upload the executable those PCs already run. A dependency zip is one CLI: its installer, the binary, the host config, and a `VERSION` file with that tool's version. `update.bat` and `update.sh` do not download these. `GET /api/latest` accepts only `windows`, `ubuntu-18.04`, `ubuntu-20.04`, `ubuntu-22.04`, and `ubuntu-24.04`. An executable zip has `yaver.exe` or `yaver` next to `_internal`, at the top of the zip. The install page tells people to download that zip, unpack it, and start the executable. It does not tell them to run an install-zip script. Later updates use `update.bat` or `update.sh` from that same folder.
 
-If the uploaded zip has a single folder around those files, the site removes that folder before it publishes. A download then opens onto the binary and the other files. The checksum on the site is the checksum of that published zip.
+If the uploaded Yaver zip has a single folder around the five zips, the site removes that folder before it reads the names. Each published zip is opened the same way, so a download lists `yaver.exe` or `yaver` at the top. A frozen zip that has no `update.bat` (Windows) or `update.sh` (Ubuntu) at the top receives that script before it is published. A script already in the zip stays as it was uploaded. The checksum on the site is the checksum of that published zip.
 
-Leave the version field empty when the zip has a `VERSION` file at the top. The site publishes that text. A filename that contains `latest`, such as `yaver-windows-latest.zip` or `yaver-ubuntu-22.04-latest.zip`, is the usual executable upload. Type a version only when that file is missing. A typed version that disagrees with the file is refused.
+A `VERSION` file inside one of the five zips has to match the version in that file's name. A dependency leaves the version field empty when its zip has a `VERSION` file at the top. The site publishes that text. Type a dependency version only when that file is missing. A typed version that disagrees with the file is refused.
 
 A PC running the executable will not install a full install zip, and a full install will not apply an executable zip. Uploading again for the same platform replaces the current file.
 

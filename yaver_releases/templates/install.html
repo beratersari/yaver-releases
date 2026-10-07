@@ -1,6 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Install Yaver{% endblock %}
 {% block body %}
+<section class="need" aria-label="Required software">
+  <p class="need-kicker">Before anything else</p>
+  <p class="need-title">You must install OpenCode to use Yaver.</p>
+  <p class="need-copy">Claude Code and Codex are optional. Install them only when you want those workers.</p>
+  <div class="need-grid">
+    <a class="need-card is-required" href="/dependencies#opencode">
+      <span class="tag need-tag">Required</span>
+      <strong>OpenCode</strong>
+      <span>Yaver does not run without this.</span>
+    </a>
+    <a class="need-card" href="/dependencies#claude">
+      <span class="tag">Optional</span>
+      <strong>Claude Code</strong>
+      <span>Leave this out unless you choose it.</span>
+    </a>
+    <a class="need-card" href="/dependencies#codex">
+      <span class="tag">Optional</span>
+      <strong>Codex</strong>
+      <span>Leave this out unless you choose it.</span>
+    </a>
+  </div>
+</section>
+
 <p class="kicker">First install</p>
 <h1>Install Yaver</h1>
 <div class="lede-block">
@@ -12,6 +35,7 @@
     <summary><h2>Windows</h2></summary>
     <div class="fold-body">
       <h3>Install</h3>
+      <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
       {{ sections.windows }}
       <h3>Update</h3>
       {{ sections.windows_update }}
@@ -34,6 +58,7 @@
     <summary><h2>{{ item[1] }}</h2></summary>
     <div class="fold-body">
       <h3>Install</h3>
+      <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
       {{ sections[item[2]] }}
       <h3>Update</h3>
       {{ sections.ubuntu_update }}
@@ -41,6 +66,4 @@
   </details>
   {% endfor %}
 </div>
-
-{% include "dependencies.html" %}
 {% endblock %}

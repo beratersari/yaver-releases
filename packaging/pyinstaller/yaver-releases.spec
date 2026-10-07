@@ -17,6 +17,7 @@ ROOT = SPECDIR.parent.parent
 datas = [
     (str(ROOT / "yaver_releases" / "templates"), "yaver_releases/templates"),
     (str(ROOT / "yaver_releases" / "static"), "yaver_releases/static"),
+    (str(ROOT / "yaver_releases" / "update_scripts"), "yaver_releases/update_scripts"),
     (str(ROOT / ".env.example"), "."),
 ]
 binaries: list = []

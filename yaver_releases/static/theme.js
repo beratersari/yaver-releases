@@ -20,8 +20,7 @@
   }
 
   apply(current());
-  if (!button) return;
-  button.addEventListener("click", function () {
+  if (button) button.addEventListener("click", function () {
     var next = current() === "dark" ? "light" : "dark";
     try {
       localStorage.setItem(key, next);
@@ -30,4 +29,36 @@
     }
     apply(next);
   });
+})();
+
+(function () {
+  function openHashedFold() {
+    var raw = (location.hash || "").replace(/^#/, "");
+    if (!raw) return;
+    var id = raw;
+    try {
+      id = decodeURIComponent(raw);
+    } catch (err) {
+      id = raw;
+    }
+    var el = document.getElementById(id);
+    if (!el) return;
+    var fold = el.tagName === "DETAILS" ? el : el.closest && el.closest("details");
+    if (!fold) return;
+    fold.open = true;
+    var summary = fold.querySelector("summary");
+    if (summary && summary.focus) summary.focus({ preventScroll: true });
+    var reduce = false;
+    try {
+      reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (err) {
+      reduce = false;
+    }
+    if (fold.scrollIntoView) {
+      fold.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    }
+  }
+
+  openHashedFold();
+  window.addEventListener("hashchange", openHashedFold);
 })();

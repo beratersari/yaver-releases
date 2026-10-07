@@ -61,6 +61,7 @@
   --danger-muted: rgba(255, 93, 115, 0.14);
   --danger-text: #ffc1ca;
   --success-text: #b6ffe2;
+  --warn: #e8b84a;
   --mark: #11182c;
   --mark-ring: rgba(61, 255, 176, 0.18);
   --font-sans: "Geist Variable", "Segoe UI", system-ui, sans-serif;
@@ -92,6 +93,7 @@ html[data-theme="light"] {
   --danger-muted: rgba(196, 35, 60, 0.1);
   --danger-text: #8e1228;
   --success-text: #085c36;
+  --warn: #8a5d00;
   --mark: #ffffff;
   --mark-ring: rgba(12, 122, 72, 0.18);
 }
@@ -160,23 +162,13 @@ a:hover { color: var(--text); }
 
 .brand-link:hover { color: var(--text); }
 
-.brand-name,
-.brand-sub { display: block; }
-
 .brand-name {
+  display: block;
   font-family: var(--font-mono);
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.2;
-}
-
-.brand-sub {
-  margin-top: 0.1rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.3;
 }
 
 .mark {
@@ -333,7 +325,6 @@ p { margin: 0.35rem 0 0.8rem; }
 }
 
 .lede {
-  max-width: 42rem;
   margin-top: 0;
   color: var(--text-secondary);
   font-size: 0.95rem;
@@ -384,6 +375,7 @@ p { margin: 0.35rem 0 0.8rem; }
 }
 
 .fold {
+  scroll-margin-top: 1rem;
   background:
     linear-gradient(180deg, var(--panel-sheen), transparent 2rem),
     var(--surface);
@@ -427,6 +419,149 @@ p { margin: 0.35rem 0 0.8rem; }
 .fold[open] > summary { border-bottom: 1px solid var(--border); }
 
 .fold-body { padding: 0.35rem 1.05rem 1rem; }
+
+.warn {
+  margin: 0.85rem 0 1rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.warn strong {
+  color: var(--warn);
+  font-weight: 640;
+}
+
+.release-note {
+  margin: 0.85rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.release-note p { margin: 0.55rem 0 0; }
+
+.release-note p:first-child { margin-top: 0; }
+
+.history-list {
+  list-style: none;
+  margin: 0.85rem 0 0.2rem;
+  padding: 0;
+}
+
+.history-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.history-label {
+  display: block;
+  font-weight: 600;
+}
+
+.history-list .quiet,
+.history-list .notes { display: block; }
+
+.tool-download { margin: 0.85rem 0 0; }
+
+.need {
+  margin: 0 0 1.75rem;
+  padding: 1.15rem 1.15rem 1.2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, var(--accent-muted), transparent 4.5rem),
+    var(--surface);
+  box-shadow: inset 0 1px 0 var(--panel-edge), 0 0 0 1px var(--mark-ring);
+}
+
+.need-kicker {
+  margin: 0;
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.need-title {
+  margin: 0.35rem 0 0;
+  font-size: 1.65rem;
+  font-weight: 620;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.need-copy {
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.need-grid {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.need-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  min-height: 6.5rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.need-card strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.need-card span:last-child {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.need-card.is-required {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.need-tag {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.need-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.need-card.is-required:hover { background: var(--accent-muted); }
+
+.need-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 720px) {
+  .need-grid { grid-template-columns: 1.4fr 1fr 1fr; }
+}
 
 .fold-body > h3:first-child { margin-top: 0.85rem; }
 
@@ -598,7 +733,6 @@ textarea { min-height: 7.5rem; resize: vertical; }
 textarea.tall { min-height: 18rem; }
 
 .lede-block > p:first-child {
-  max-width: 42rem;
   margin-top: 0;
   color: var(--text-secondary);
   font-size: 0.95rem;

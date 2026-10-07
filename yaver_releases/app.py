@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -29,6 +32,7 @@ from yaver_releases.copy import (
     CopyError,
     clean_body,
     public_html,
+    render_copy,
     sections_for_edit,
     tokens_from_url,
 )
@@ -37,11 +41,14 @@ from yaver_releases.platforms import (
     DEPENDENCIES,
     PLATFORMS,
     PackageError,
+    ensure_updater,
     flatten_wrapper,
     inspect_zip,
+    is_executable_bundle,
     package_label,
     require_version,
     safe_filename,
+    split_executable_bundle,
     version_from_zip,
 )
 from yaver_releases.store import ReleaseStore
@@ -74,8 +81,13 @@ def _layout_label(value: object) -> str:
     }.get(str(value or ""), "")
 
 
+def _release_note(value: object):
+    return render_copy(str(value or ""))
+
+
 _TEMPLATES.env.filters["size"] = _format_size
 _TEMPLATES.env.filters["layout_label"] = _layout_label
+_TEMPLATES.env.filters["release_note"] = _release_note
 _MAX_UPLOAD = 8 * 1024 * 1024 * 1024
 _FAILS: dict[str, list[float]] = {}
 
@@ -135,36 +147,54 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"No {PLATFORMS[key]} release is published.")
         return row
 
+    @app.get("/download/{platform}/{version}")
+    def download_version(platform: str, version: str) -> FileResponse:
+        key = _package_or_404(platform)
+        try:
+            ver = require_version(version)
+        except PackageError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        row = store.get_version(key, ver)
+        path = store.blob_path(key, ver)
+        if row is None or path is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {package_label(key)} {ver} release is published.",
+            )
+        return _zip_response(path, row["filename"])
+
     @app.get("/download/{platform}")
     def download(platform: str) -> FileResponse:
         key = _package_or_404(platform)
         row = store.get(key)
         path = store.blob_path(key)
-        if row is None or path is None:
+        if row is None or path is None or not row.get("version"):
             raise HTTPException(
                 status_code=404,
                 detail=f"No {package_label(key)} release is published.",
             )
-        return FileResponse(
-            path,
-            media_type="application/zip",
-            filename=row["filename"],
-            content_disposition_type="attachment",
-        )
+        return _zip_response(path, row["filename"])
 
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "home.html",
-            _public_context(request, store),
-        )
-
     @app.get("/install", response_class=HTMLResponse)
     def install(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
             request,
             "install.html",
+            _public_context(request, store),
+        )
+
+    @app.get("/releases", response_class=HTMLResponse)
+    def release_history(request: Request) -> HTMLResponse:
+        context = _public_context(request, store)
+        context["history"] = store.list_history()
+        return _TEMPLATES.TemplateResponse(request, "history.html", context)
+
+    @app.get("/dependencies", response_class=HTMLResponse)
+    def dependencies_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "tools.html",
             _public_context(request, store),
         )
 
@@ -224,12 +254,17 @@ def create_app(
         platform: str = Form(""),
         version: str = Form(""),
         notes: str = Form(""),
+        kind: str = Form(""),
         csrf: str = Form(""),
         package: UploadFile = File(...),
     ):
         session = _require_admin(request, app, csrf)
         try:
-            key = _package_or_404(platform)
+            mode = (kind or "").strip().lower()
+            if mode not in ("", "bundle"):
+                raise PackageError("Unknown upload.")
+            platform_text = (platform or "").strip()
+            key = _package_or_404(platform_text) if platform_text else ""
             typed = require_version(version) if (version or "").strip() else ""
             filename = safe_filename(package.filename or "")
             note = _clean_notes(notes)
@@ -237,8 +272,9 @@ def create_app(
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
             return _admin_again(request, app, session, str(detail))
         blob = root / "incoming.tmp"
-        size = 0
+        published_as = ""
         try:
+            size = 0
             with blob.open("wb") as handle:
                 while True:
                     chunk = package.file.read(1024 * 1024)
@@ -252,34 +288,24 @@ def create_app(
             if magic not in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
                 raise PackageError("The file is not a zip.")
             flatten_wrapper(blob)
-            layout = inspect_zip(blob)
-            inside = version_from_zip(blob)
-            if inside and typed and inside != typed:
-                raise PackageError(f"The VERSION file says {inside}.")
-            ver = inside or typed
-            if not ver:
-                raise PackageError(
-                    "Type a version, or put a VERSION file at the top of the zip."
-                )
-            digest = hashlib.sha256()
-            published_size = 0
-            with blob.open("rb") as handle:
-                while True:
-                    chunk = handle.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    published_size += len(chunk)
-                    digest.update(chunk)
-            store.publish(
-                platform=key,
-                version=ver,
-                filename=filename,
-                sha256=digest.hexdigest(),
-                size=published_size,
-                layout=layout,
-                notes=note,
-                blob=blob,
+            use_bundle = mode == "bundle" or (
+                key not in DEPENDENCIES and is_executable_bundle(blob)
             )
+            if use_bundle:
+                if key in DEPENDENCIES:
+                    raise PackageError("Upload one dependency zip, not the Yaver bundle.")
+                work = Path(tempfile.mkdtemp(prefix="yaver-bundle-", dir=root))
+                try:
+                    prepared = _prepare_bundle(blob, work, filename, typed, note)
+                    store.publish_many(prepared)
+                finally:
+                    shutil.rmtree(work, ignore_errors=True)
+                published_as = "bundle"
+            else:
+                if not key:
+                    raise PackageError("Choose a package.")
+                _publish_one(store, blob, key, typed, filename, note)
+                published_as = key
         except PackageError as exc:
             return _admin_again(request, app, session, str(exc))
         finally:
@@ -287,7 +313,7 @@ def create_app(
                 blob.unlink()
             except OSError:
                 pass
-        return RedirectResponse(f"/admin?uploaded={key}", status_code=303)
+        return RedirectResponse(f"/admin?uploaded={published_as}", status_code=303)
 
     @app.post("/admin/delete")
     def delete(request: Request, platform: str = Form(""), csrf: str = Form("")):
@@ -395,7 +421,95 @@ def _login_page(request: Request, app: FastAPI, error: str) -> HTMLResponse:
     return body
 
 
+def _sha256_file(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            digest.update(chunk)
+    return digest.hexdigest(), size
+
+
+def _prepare_bundle(
+    blob: Path,
+    work: Path,
+    upload_name: str,
+    typed: str,
+    notes: str,
+) -> list[dict]:
+    prepared: list[dict] = []
+    members, file_note = split_executable_bundle(blob, work, upload_name, typed)
+    chosen = file_note or notes
+    for platform, version, name, part in members:
+        flatten_wrapper(part)
+        layout = inspect_zip(part)
+        if layout != "frozen":
+            raise PackageError(f"{name} is not an executable package.")
+        inside = version_from_zip(part)
+        if inside and inside != version:
+            raise PackageError(f"{name} says {inside} in VERSION.")
+        try:
+            ensure_updater(part, platform)
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise PackageError("The update script could not be added to the zip.") from exc
+        digest, size = _sha256_file(part)
+        prepared.append(
+            {
+                "platform": platform,
+                "version": version,
+                "filename": name,
+                "sha256": digest,
+                "size": size,
+                "layout": layout,
+                "notes": chosen,
+                "blob": part,
+            }
+        )
+    return prepared
+
+
+def _publish_one(
+    store: ReleaseStore,
+    blob: Path,
+    key: str,
+    typed: str,
+    filename: str,
+    note: str,
+) -> None:
+    layout = inspect_zip(blob)
+    inside = version_from_zip(blob)
+    if inside and typed and inside != typed:
+        raise PackageError(f"The VERSION file says {inside}.")
+    ver = inside or typed
+    if not ver:
+        raise PackageError("Type a version, or put a VERSION file at the top of the zip.")
+    if layout == "frozen":
+        try:
+            ensure_updater(blob, key)
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise PackageError("The update script could not be added to the zip.") from exc
+    digest, size = _sha256_file(blob)
+    store.publish(
+        platform=key,
+        version=ver,
+        filename=filename,
+        sha256=digest,
+        size=size,
+        layout=layout,
+        notes=note,
+        blob=blob,
+    )
+
+
 def _notice_for(uploaded: str, saved: str) -> str:
+    if uploaded == "bundle":
+        labels = list(PLATFORMS.values())
+        names = ", ".join(labels[:-1]) + ", and " + labels[-1]
+        return f"Published the {names} packages."
     if uploaded in PLATFORMS or uploaded in DEPENDENCIES:
         return f"Published the {package_label(uploaded)} package."
     if saved == "text":
@@ -405,28 +519,43 @@ def _notice_for(uploaded: str, saved: str) -> str:
     return ""
 
 
-def _dependency_groups() -> list[dict]:
+def _zip_response(path: Path, filename: str) -> FileResponse:
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=filename,
+        content_disposition_type="attachment",
+    )
+
+
+def _dependency_groups(rows: list[dict]) -> list[dict]:
+    by_platform = {str(row["platform"]): row for row in rows}
     specs = (
         ("opencode", "OpenCode", "opencode_windows", "opencode_linux"),
         ("claude", "Claude Code", "claude_windows", "claude_linux"),
         ("codex", "Codex", "codex_windows", "codex_linux"),
     )
-    return [
-        {
-            "id": tool,
-            "label": label,
-            "windows_copy": windows_copy,
-            "linux_copy": linux_copy,
-        }
-        for tool, label, windows_copy, linux_copy in specs
-    ]
+    groups: list[dict] = []
+    for tool, label, windows_copy, linux_copy in specs:
+        groups.append(
+            {
+                "id": tool,
+                "label": label,
+                "windows_copy": windows_copy,
+                "linux_copy": linux_copy,
+                "windows_row": by_platform.get(f"{tool}-windows", {}),
+                "linux_row": by_platform.get(f"{tool}-linux", {}),
+            }
+        )
+    return groups
 
 
 def _public_context(request: Request, store: ReleaseStore) -> dict:
+    dependency_rows = store.list_dependencies()
     return {
         "releases": store.list_all(),
-        "dependency_rows": store.list_dependencies(),
-        "dependencies": _dependency_groups(),
+        "dependency_rows": dependency_rows,
+        "dependencies": _dependency_groups(dependency_rows),
         "sections": _public_sections(request, store),
     }
 
@@ -457,7 +586,6 @@ def _admin_page(
         {
             "releases": app.state.store.list_all(),
             "dependency_rows": app.state.store.list_dependencies(),
-            "platforms": PLATFORMS,
             "dependency_platforms": DEPENDENCIES,
             "csrf": session["csrf"],
             "notice": notice,

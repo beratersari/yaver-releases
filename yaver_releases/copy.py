@@ -17,8 +17,8 @@ _INLINE = re.compile(r"`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)")
 
 # Order is the order of the admin form and the public pages.
 SECTIONS: tuple[tuple[str, str, str], ...] = (
-    ("home_intro", "Releases page introduction", "Releases"),
-    ("home_update", "Releases page, after install", "Releases"),
+    ("home_intro", "Release history introduction", "Release history"),
+    ("home_update", "Release history, after install", "Release history"),
     ("install_intro", "Install page introduction", "Install"),
     ("windows", "Windows install", "Install"),
     ("windows_update", "Windows update", "Install"),
@@ -28,13 +28,13 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("ubuntu22", "Ubuntu 22.04", "Install"),
     ("ubuntu24", "Ubuntu 24.04", "Install"),
     ("ubuntu_update", "Ubuntu update, shown in each version", "Install"),
-    ("deps_intro", "Dependencies introduction", "Install"),
-    ("opencode_windows", "OpenCode on Windows", "Install"),
-    ("opencode_linux", "OpenCode on Linux", "Install"),
-    ("claude_windows", "Claude Code on Windows", "Install"),
-    ("claude_linux", "Claude Code on Linux", "Install"),
-    ("codex_windows", "Codex on Windows", "Install"),
-    ("codex_linux", "Codex on Linux", "Install"),
+    ("deps_intro", "Dependencies introduction", "Dependencies"),
+    ("opencode_windows", "OpenCode on Windows", "Dependencies"),
+    ("opencode_linux", "OpenCode on Linux", "Dependencies"),
+    ("claude_windows", "Claude Code on Windows", "Dependencies"),
+    ("claude_linux", "Claude Code on Linux", "Dependencies"),
+    ("codex_windows", "Codex on Windows", "Dependencies"),
+    ("codex_linux", "Codex on Linux", "Dependencies"),
 )
 
 TOKEN_HELP: tuple[tuple[str, str], ...] = (
@@ -78,19 +78,23 @@ DEFAULTS: dict[str, str] = {
     ),
     "home_update": (
         "The first install is on the [install page](/install). After that, "
-        "stop Yaver and run `yaver update` (Windows: `yaver.exe update`). "
-        "The command reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`, "
-        "downloads the package for that "
-        "computer, replaces the install, and starts Yaver again. The `.env` "
-        "file and the data folder stay."
+        "run `update.bat` on Windows or `./update.sh` on Ubuntu from the "
+        "Yaver folder. Set `RELEASE_HOST` and `RELEASE_PORT` in `.env` "
+        "first. The script stops Yaver, downloads the package for that "
+        "computer, and replaces the program files, including `yaver.exe` "
+        "or `yaver`, `_internal`, `.env.example`, `opencoderman`, and "
+        "`install-agents.bat` or `install-agents.sh`. The `.env` file "
+        "stays. The script file you ran stays. Start Yaver after the "
+        "script finishes. If this folder does not have `update.bat` or "
+        "`update.sh` yet, download the zip once, copy that script into "
+        "the Yaver folder, and run it there."
     ),
     "install_intro": (
         "Open this page from the address the other computers use, then copy "
         "the commands. Everyone installs the executable. The commands "
-        "download that zip, unpack it, and start Yaver. OpenCode, Claude Code, "
-        "and Codex are separate downloads in Dependencies."
+        "download that zip, unpack it, and start Yaver."
     ),
-    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, and `.env.example`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
+    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, `.env.example`, and `update.bat`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
 
 PowerShell:
 
@@ -106,12 +110,9 @@ notepad .env
 
 Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 """,
-    "windows_update": r"""Stop Yaver first. The command refuses to run while the dashboard port is open. It reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`. When the package is in place, the command starts Yaver again. `.env` and the data folder stay.
-
-```
-Get-Process yaver -ErrorAction SilentlyContinue | Stop-Process
+    "windows_update": r"""```
 cd C:\path\to\yaver
-.\yaver.exe update
+update.bat
 ```
 """,
     "ubuntu_intro": (
@@ -130,14 +131,10 @@ cd C:\path\to\yaver
     "ubuntu20": _ubuntu_steps("20.04", "ubuntu20"),
     "ubuntu22": _ubuntu_steps("22.04", "ubuntu22"),
     "ubuntu24": _ubuntu_steps("24.04", "ubuntu24"),
-    "ubuntu_update": r"""Stop Yaver first. The command refuses to run while the dashboard port is open. It reads `RELEASE_HOST` and `RELEASE_PORT` from `.env`. When the package is in place, the command starts Yaver again. `.env` and the data folder stay.
-
-```
-pid=$(ss -ltnp 'sport = :8080' | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n 1)
-if [ -n "$pid" ]; then kill "$pid"; sleep 1; fi
+    "ubuntu_update": r"""```
 cd "$HOME/yaver"
-chmod 755 ./yaver
-./yaver update
+chmod 755 update.sh
+./update.sh
 ```
 """,
     "deps_intro": (

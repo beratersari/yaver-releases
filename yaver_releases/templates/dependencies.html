@@ -8,8 +8,14 @@
     <summary><h2>{{ item.label }}</h2></summary>
     <div class="fold-body">
       <h3>Windows</h3>
+      {% if item.windows_row.version %}
+      <p class="tool-download"><a class="button" href="{{ item.windows_row.download_path }}">Download {{ item.windows_row.version }}</a>{% if item.windows_row.layout %} <span class="tag">{{ item.windows_row.layout|layout_label }}</span>{% endif %}</p>
+      {% endif %}
       {{ sections[item.windows_copy] }}
       <h3>Linux</h3>
+      {% if item.linux_row.version %}
+      <p class="tool-download"><a class="button" href="{{ item.linux_row.download_path }}">Download {{ item.linux_row.version }}</a>{% if item.linux_row.layout %} <span class="tag">{{ item.linux_row.layout|layout_label }}</span>{% endif %}</p>
+      {% endif %}
       {{ sections[item.linux_copy] }}
     </div>
   </details>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Release history · Yaver{% endblock %}
+{% block body %}
+<p class="kicker">Archive</p>
+<h1>Release history</h1>
+<div class="lede-block">
+  {{ sections.home_intro }}
+</div>
+
+{% if history %}
+<div class="folds">
+  {% for group in history %}
+  <details class="fold" id="release-{{ group.version }}"{% if loop.first %} open{% endif %}>
+    <summary><h2>{{ group.version }}</h2></summary>
+    <div class="fold-body">
+      {% if group.notes %}
+      <div class="release-note">{{ group.notes|release_note }}</div>
+      {% endif %}
+      <ul class="history-list">
+        {% for row in group.packages %}
+        <li>
+          <span>
+            <span class="history-label">{{ row.label }}</span>
+            <span class="quiet">{{ row.filename }} · {{ row.size|size }}</span>
+            {% if row.notes and row.notes != group.notes %}<span class="notes">{{ row.notes }}</span>{% endif %}
+          </span>
+          <a class="button" href="{{ row.download_path }}">Download</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </details>
+  {% endfor %}
+</div>
+{% else %}
+<p class="quiet">No release has been published.</p>
+{% endif %}
+{% endblock %}

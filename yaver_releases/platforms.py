@@ -19,8 +19,8 @@ PLATFORMS: dict[str, str] = {
     "ubuntu-24.04": "Ubuntu 24.04",
 }
 
-# Office downloads for the CLIs. These ids are not Yaver update targets.
-# ``yaver update`` only asks for a platform in ``PLATFORMS``.
+# Office downloads for the CLIs. These ids are not Yaver package targets.
+# update.bat and update.sh only ask for a platform in ``PLATFORMS``.
 DEPENDENCIES: dict[str, str] = {
     "opencode-windows": "OpenCode for Windows",
     "opencode-linux": "OpenCode for Linux",
@@ -35,6 +35,54 @@ def package_label(platform: str) -> str:
     if platform in PLATFORMS:
         return PLATFORMS[platform]
     return DEPENDENCIES.get(platform, platform)
+
+
+def updater_name(platform: str) -> str | None:
+    """Script file a frozen zip for this platform must contain."""
+    if platform == "windows":
+        return "update.bat"
+    if platform in PLATFORMS:
+        return "update.sh"
+    return None
+
+
+def updater_bytes(name: str) -> bytes:
+    path = Path(__file__).resolve().parent / "update_scripts" / name
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise PackageError("The update script is not available on this site.") from exc
+    if not data:
+        raise PackageError("The update script is not available on this site.")
+    if name.endswith(".sh") and b"\r" in data:
+        raise PackageError("The update script is not available on this site.")
+    return data
+
+
+def ensure_updater(path: Path, platform: str) -> bool:
+    """Add the operator update script when a frozen zip does not have it.
+
+    A script already stored at the zip root is left unchanged. Returns
+    True when this call adds the file.
+    """
+    name = updater_name(platform)
+    if name is None:
+        return False
+    data = updater_bytes(name)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if _is_link(info) or _is_dir_entry(info):
+                continue
+            if _member_parts(info.filename) == [name]:
+                return False
+    info = zipfile.ZipInfo(filename=name, date_time=(1980, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    if name.endswith(".sh"):
+        info.create_system = 3
+        info.external_attr = (stat.S_IFREG | 0o755) << 16
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr(info, data)
+    return True
 
 _VERSION = re.compile(r"^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.]+)?$")
 _MAX_MEMBERS = 200_000
@@ -238,6 +286,214 @@ def classify_members(names: list[str]) -> str:
     if _is_cli(joined):
         return "cli"
     return "unknown"
+
+
+# Same five names as packaging/pyinstaller/executable_bundle.py in the Yaver repo.
+# The office upload reads the version from these names.
+_BUNDLE_FILES: tuple[tuple[str, str], ...] = (
+    ("windows", "yaver-windows-x64-{version}.zip"),
+    ("ubuntu-18.04", "yaver-linux-x64-ubuntu-18.04-{version}.zip"),
+    ("ubuntu-20.04", "yaver-linux-x64-ubuntu-20.04-{version}.zip"),
+    ("ubuntu-22.04", "yaver-linux-x64-ubuntu-22.04-{version}.zip"),
+    ("ubuntu-24.04", "yaver-linux-x64-ubuntu-24.04-{version}.zip"),
+)
+_NAME_VERSION = re.compile(
+    r"-(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.]+)?)\.zip$",
+    re.IGNORECASE,
+)
+
+
+def bundle_member(filename: str) -> tuple[str, str] | None:
+    """Return ``(platform, version)`` when ``filename`` is one of the five zips."""
+    base = Path(filename or "").name
+    found: list[tuple[str, str]] = []
+    for platform, pattern in _BUNDLE_FILES:
+        prefix, suffix = pattern.split("{version}")
+        if not base.startswith(prefix) or not base.endswith(suffix):
+            continue
+        middle = base[len(prefix) : len(base) - len(suffix)]
+        if _VERSION.fullmatch(middle):
+            found.append((platform, middle))
+    if len(found) == 1:
+        return found[0]
+    return None
+
+
+def version_in_filename(filename: str) -> str | None:
+    """Return a version at the end of a zip name, such as ``yaver-executables-0.9.79.zip``."""
+    match = _NAME_VERSION.search(Path(filename or "").name)
+    if match is None:
+        return None
+    text = match.group(1)
+    if not _VERSION.fullmatch(text):
+        return None
+    return text
+
+
+_NOTE_NAME = "RELEASE_NOTES.txt"
+_MAX_NOTE_BYTES = 64 * 1024
+_MAX_NOTE_CHARS = 32_000
+
+
+def is_executable_bundle(path: Path) -> bool:
+    """True when the zip holds versioned Yaver packages and an optional note.
+
+    ``RELEASE_NOTES.txt`` is the only file that is not itself a zip.
+    """
+    if not zipfile.is_zipfile(path):
+        return False
+    names: list[str] = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if _is_link(info) or _is_dir_entry(info):
+                continue
+            parts = _member_parts(info.filename)
+            if parts:
+                names.append(parts[-1])
+    if not names:
+        return False
+    zips = 0
+    notes = 0
+    for name in names:
+        if name == _NOTE_NAME:
+            notes += 1
+            continue
+        if name.lower().endswith(".zip"):
+            zips += 1
+            continue
+        return False
+    return zips > 0 and notes <= 1
+
+
+def _release_note_text(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> str:
+    """Read ``RELEASE_NOTES.txt``. Reject a huge, empty, or non-UTF-8 file."""
+    if int(info.file_size) > _MAX_NOTE_BYTES:
+        raise PackageError("The release note is too long.")
+    chunks: list[bytes] = []
+    total = 0
+    with archive.open(info, "r") as src:
+        while True:
+            block = src.read(8192)
+            if not block:
+                break
+            total += len(block)
+            if total > _MAX_NOTE_BYTES:
+                raise PackageError("The release note is too long.")
+            chunks.append(block)
+    raw = b"".join(chunks).replace(b"\x00", b"")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise PackageError("The release note is not UTF-8 text.") from exc
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        raise PackageError("The release note is empty.")
+    if len(text) > _MAX_NOTE_CHARS:
+        raise PackageError("The release note is too long.")
+    return text
+
+
+def split_executable_bundle(
+    path: Path,
+    dest: Path,
+    upload_name: str,
+    typed_version: str = "",
+) -> tuple[list[tuple[str, str, str, Path]], str]:
+    """Extract the five versioned Yaver zips into ``dest``.
+
+    Each returned path is a generated file name. The third item is the
+    zip name from the upload, which is the name colleagues download.
+    The second value is the text of ``RELEASE_NOTES.txt``, or ``""`` when
+    that file is absent.
+    """
+    if not zipfile.is_zipfile(path):
+        raise PackageError("The file is not a zip.")
+    planned: list[tuple[zipfile.ZipInfo, str, str, str]] = []
+    seen: dict[str, str] = {}
+    note = ""
+    note_seen = False
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as exc:
+        raise PackageError("The file is not a zip.") from exc
+    with archive:
+        infos = archive.infolist()
+        if len(infos) > _MAX_MEMBERS:
+            raise PackageError("The zip has too many files.")
+        total = 0
+        for info in infos:
+            if _is_link(info):
+                raise PackageError("The zip contains a symlink.")
+            if _is_dir_entry(info):
+                continue
+            parts = _member_parts(info.filename)
+            if not parts:
+                continue
+            if len(parts) != 1:
+                raise PackageError("Put the Yaver zips at the top of the upload.")
+            total += max(0, int(info.file_size))
+            if total > _MAX_UNCOMPRESSED:
+                raise PackageError("The zip expands to more than 16 GB.")
+            base = parts[0]
+            if base == _NOTE_NAME:
+                if note_seen:
+                    raise PackageError("The zip contains more than one release note.")
+                note_seen = True
+                note = _release_note_text(archive, info)
+                continue
+            if not base.lower().endswith(".zip"):
+                raise PackageError(
+                    "Upload the zip that contains the five versioned Yaver packages."
+                )
+            matched = bundle_member(base)
+            if matched is None:
+                raise PackageError(f"{base} is not a versioned Yaver package.")
+            platform, version = matched
+            if platform in seen:
+                raise PackageError(
+                    f"The zip contains more than one file for {package_label(platform)}."
+                )
+            seen[platform] = version
+            planned.append((info, platform, version, base))
+        if not planned:
+            raise PackageError(
+                "Upload the zip that contains the five versioned Yaver packages."
+            )
+        versions = set(seen.values())
+        if len(versions) != 1:
+            raise PackageError("These file names use more than one version.")
+        version = next(iter(versions))
+        typed = (typed_version or "").strip()
+        if typed and typed != version:
+            raise PackageError(f"The form says {typed}, and the zip names say {version}.")
+        outer = version_in_filename(upload_name)
+        if outer and outer != version:
+            raise PackageError(
+                f"{upload_name} says {outer}, and the files inside are {version}."
+            )
+        missing = [package_label(key) for key in PLATFORMS if key not in seen]
+        if missing:
+            raise PackageError("The zip is missing " + ", ".join(missing) + ".")
+        dest.mkdir(parents=True, exist_ok=True)
+        extracted: list[tuple[str, str, str, Path]] = []
+        running = 0
+        for index, (info, platform, member_version, base) in enumerate(planned):
+            target = dest / f"{index}.zip"
+            written = 0
+            with archive.open(info, "r") as src, target.open("wb") as out:
+                while True:
+                    block = src.read(1024 * 1024)
+                    if not block:
+                        break
+                    written += len(block)
+                    running += len(block)
+                    if written > _MAX_UNCOMPRESSED or running > _MAX_UNCOMPRESSED:
+                        raise PackageError("The zip expands to more than 16 GB.")
+                    out.write(block)
+            extracted.append((platform, member_version, base, target))
+    order = {key: index for index, key in enumerate(PLATFORMS)}
+    extracted.sort(key=lambda item: order[item[0]])
+    return extracted, note
 
 
 def _is_cli(names: set[str]) -> bool:

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from yaver_releases.app import create_app
 from yaver_releases.dotenv import load_dotenv
-from yaver_releases.platforms import classify_members, flatten_wrapper
+from yaver_releases.platforms import classify_members, flatten_wrapper, updater_bytes
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -60,21 +60,41 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert health.json() == {"ok": True}
     home = client.get("/")
     assert home.status_code == 200
-    assert "Not published yet" in home.text
+    assert "LAN releases" not in home.text
     assert "Install" in home.text
     assert 'href="/admin"' not in home.text
+    assert home.text.index(">Install<") < home.text.index(">Release history<") < home.text.index(">Dependencies<")
+    releases = client.get("/releases")
+    assert releases.status_code == 200
+    assert "Release history" in releases.text
+    assert "No release has been published." in releases.text
+    assert "<h1>Release history</h1>" in releases.text
     login = client.get("/admin/login")
     assert login.status_code == 200
     assert 'href="/admin"' not in login.text
     css = client.get("/static/site.css")
     assert css.status_code == 200
     assert "Geist Variable" in css.text
+    assert "max-width: 42rem" not in css.text
+    assert "max-width: 36rem" not in css.text
+    assert "#f5c451" not in css.text
+    assert "--warn: #e8b84a" in css.text
     assert client.get("/static/yaver-wink.gif").status_code == 200
     missing = client.get("/api/latest?platform=windows")
     assert missing.status_code == 404
     assert client.get("/api/latest?platform=../windows").status_code == 404
     install = client.get("/install")
     assert install.status_code == 200
+    assert "You must install OpenCode to use Yaver." in install.text
+    assert "Claude Code and Codex are optional." in install.text
+    assert install.text.index("You must install OpenCode") < install.text.index('id="windows"')
+    assert 'href="/dependencies#opencode"' in install.text
+    script = client.get("/static/theme.js")
+    assert script.status_code == 200
+    assert "fold.open = true" in script.text
+    assert 'document.getElementById' in script.text
+    assert 'href="/dependencies#claude"' in install.text
+    assert 'href="/dependencies#codex"' in install.text
     assert 'href="/admin"' not in install.text
     assert "Install zip" not in install.text
     assert "cannot reach this IP" not in install.text
@@ -85,45 +105,48 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "http://testserver/download/ubuntu-22.04" in install.text
     assert "curl.exe -fL" in install.text
     assert "tar.exe -xf yaver-windows.zip -C yaver" in install.text
-    assert install.text.count("<details") == 8
-    assert 'id="opencode"' in install.text
-    assert 'id="claude"' in install.text
-    assert 'id="codex"' in install.text
-    assert install.text.index('id="ubuntu-24.04"') < install.text.index('id="opencode"')
-    assert install.text.index('id="opencode"') < install.text.index('id="claude"')
-    assert install.text.index('id="claude"') < install.text.index('id="codex"')
-    assert "http://testserver/download/opencode-windows" in install.text
-    assert "http://testserver/download/opencode-linux" in install.text
-    assert "http://testserver/download/claude-windows" in install.text
-    assert "http://testserver/download/claude-linux" in install.text
-    assert "http://testserver/download/codex-windows" in install.text
-    assert "http://testserver/download/codex-linux" in install.text
-    assert ".\\install-opencode.bat" in install.text
-    assert "./install-opencode.sh" in install.text
-    assert ".\\install-claude.bat" in install.text
-    assert "./install-claude.sh" in install.text
-    assert ".\\install-codex.bat" in install.text
-    assert "./install-codex.sh" in install.text
-    assert "OpenCode for Windows" in home.text
-    assert "Claude Code for Linux" in home.text
-    assert "Codex for Windows" in home.text
+    assert install.text.count("<details") == 5
+    assert 'id="opencode"' not in install.text
+    assert "install-opencode.bat" not in install.text
+    tools = client.get("/dependencies")
+    assert tools.status_code == 200
+    assert tools.text.count("<details") == 3
+    assert 'id="opencode"' in tools.text
+    assert 'id="claude"' in tools.text
+    assert 'id="codex"' in tools.text
+    assert tools.text.index('id="opencode"') < tools.text.index('id="claude"')
+    assert tools.text.index('id="claude"') < tools.text.index('id="codex"')
+    assert "http://testserver/download/opencode-windows" in tools.text
+    assert "http://testserver/download/opencode-linux" in tools.text
+    assert "http://testserver/download/claude-windows" in tools.text
+    assert "http://testserver/download/claude-linux" in tools.text
+    assert "http://testserver/download/codex-windows" in tools.text
+    assert "http://testserver/download/codex-linux" in tools.text
+    assert ".\\install-opencode.bat" in tools.text
+    assert "./install-opencode.sh" in tools.text
+    assert ".\\install-claude.bat" in tools.text
+    assert "./install-claude.sh" in tools.text
+    assert ".\\install-codex.bat" in tools.text
+    assert "./install-codex.sh" in tools.text
+    assert "OpenCode" in tools.text
+    assert "Claude Code" in tools.text
+    assert "Codex" in tools.text
     assert "install-opencode.bat" not in home.text
     assert "install-claude.sh" not in home.text
     assert "install-codex.bat" not in home.text
     assert "/download/opencode-windows" not in home.text
-    assert "<details" not in home.text
     assert "Windows package is not published yet." not in home.text
     assert "Windows package is not published yet." not in install.text
-    assert install.text.count("<h3>Windows</h3>") == 3
-    assert install.text.count("<h3>Linux</h3>") == 3
+    assert tools.text.count("<h3>Windows</h3>") == 3
+    assert tools.text.count("<h3>Linux</h3>") == 3
     assert install.text.count("<h3>Install</h3>") == 5
     assert install.text.count("<h3>Update</h3>") == 5
     assert install.text.count("setsid nohup ./yaver start") == 4
     assert install.text.count("nano .env") == 5
     assert "notepad .env" in install.text
-    assert install.text.count("./yaver update") == 4
+    assert install.text.count("./update.sh") == 4
     windows_at = install.text.index('id="windows"')
-    windows_update = install.text.index(".\\yaver.exe update")
+    windows_update = install.text.index("update.bat")
     ubuntu18 = install.text.index('id="ubuntu-18.04"')
     ubuntu22 = install.text.index('id="ubuntu-22.04"')
     ubuntu24 = install.text.index('id="ubuntu-24.04"')
@@ -131,20 +154,39 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     ubuntu22_block = install.text[ubuntu22:ubuntu24]
     assert "unzip -o /tmp/yaver-22.04.zip" in ubuntu22_block
     assert "nano .env" in ubuntu22_block
-    assert "./yaver update" in ubuntu22_block
+    assert "./update.sh" in ubuntu22_block
     assert "yaver-18.04.zip" not in ubuntu22_block
     assert "Start again later" not in install.text
     assert "Start-Process" not in install.text
     assert "&lt; /dev/null" in install.text
     assert "< /dev/null" not in install.text
     assert "unzip -o /tmp/yaver-22.04.zip" in install.text
-    assert ".\\yaver.exe update" in install.text
-    assert "./yaver update" in install.text
+    assert "update.bat" in install.text
+    assert install.text.count('class="warn"') == 5
+    assert install.text.count("<strong>Warning</strong>:") == 5
+    assert "<strong>Warning</strong>." not in install.text
+    assert "DASHBOARD_USERNAME" in install.text
+    assert "DASHBOARD_PASSWORD" in install.text
+    windows_warn = install.text.index('class="warn"', windows_at)
+    windows_command = install.text.index("curl.exe", windows_at)
+    assert windows_at < windows_warn < windows_command
+    ubuntu_warn = install.text.index('class="warn"', ubuntu22)
+    ubuntu_command = install.text.index("mkdir -p", ubuntu22)
+    assert ubuntu22 < ubuntu_warn < ubuntu_command
+    assert "Start yaver.exe after the script prints Updated to." not in install.text
+    assert "If update.bat is not in the folder yet" not in install.text
+    assert "prints Updated to" not in install.text
+    assert "is not in the folder yet" not in install.text
+    assert "chmod 755 update.sh" in install.text
+    assert "./update.sh" in install.text
+    assert "yaver update" not in install.text
     assert "--host" not in install.text
     assert "--port" not in install.text
     assert "Copy-Item .env.example .env" in install.text
     assert "Update from Settings" not in home.text
-    assert "yaver update" in home.text
+    assert "update.bat" in home.text
+    assert "update.sh" in home.text
+    assert "yaver update" not in home.text
 
 
 def test_flatten_wrapper_removes_one_folder_and_keeps_a_flat_zip(tmp_path: Path):
@@ -256,13 +298,16 @@ def test_a_cli_zip_is_a_dependency_and_not_a_yaver_update(tmp_path: Path):
     assert all(item["platform"] != "opencode-windows" for item in catalog["releases"])
     downloaded = client.get("/download/opencode-windows")
     assert downloaded.status_code == 200
-    home = client.get("/")
-    assert "1.18.10" in home.text
-    assert "Command-line tool" in home.text
-    assert 'href="/download/opencode-windows"' in home.text
-    assert "install-opencode.bat" not in home.text
+    with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+        assert "update.bat" not in archive.namelist()
+        assert "update.sh" not in archive.namelist()
+    tools = client.get("/dependencies")
+    assert "1.18.10" in tools.text
+    assert "Command-line tool" in tools.text
+    assert 'href="/download/opencode-windows"' in tools.text
+    assert ".\\install-opencode.bat" in tools.text
     install = client.get("/install")
-    assert ".\\install-opencode.bat" in install.text
+    assert ".\\install-opencode.bat" not in install.text
     assert "1.18.10" not in install.text
     assert "Command-line tool" not in install.text
     assert client.get("/api/latest?platform=windows").status_code == 404
@@ -319,13 +364,118 @@ def test_upload_requires_login_and_then_publishes(tmp_path: Path):
             "yaver.exe",
             "_internal/marker",
             ".env.example",
+            "update.bat",
         }
+        assert archive.read("update.bat") == updater_bytes("update.bat")
     assert "yaver-windows.zip" in downloaded.headers["content-disposition"]
 
-    home = client.get("/")
-    assert "0.9.72" in home.text
-    assert "<script>alert" not in home.text
-    assert "&lt;script&gt;" in home.text
+    history = client.get("/releases")
+    assert "0.9.72" in history.text
+    assert 'href="/download/windows/0.9.72"' in history.text
+    assert "<details" in history.text
+    assert "<script>alert" not in history.text
+    assert "&lt;script&gt;" in history.text
+
+
+def test_upload_keeps_an_update_script_already_in_the_zip(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    custom = b"@echo off\r\nrem already published\r\n"
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "windows", "version": "0.9.72", "csrf": token},
+        files={
+            "package": (
+                "yaver.zip",
+                _zip({"yaver.exe": "x", "_internal/a": "b", "update.bat": custom.decode("ascii")}),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/windows").content)) as archive:
+        assert archive.read("update.bat") == custom
+        assert archive.namelist().count("update.bat") == 1
+
+
+def test_ubuntu_upload_adds_update_sh(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "ubuntu-22.04", "version": "0.9.72", "csrf": token},
+        files={
+            "package": (
+                "yaver.zip",
+                _zip({"yaver": "bin", "_internal/a": "x"}),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/ubuntu-22.04").content)) as archive:
+        info = archive.getinfo("update.sh")
+        assert archive.read("update.sh") == updater_bytes("update.sh")
+        assert (info.external_attr >> 16) & 0o777 == 0o755
+
+
+def test_a_source_zip_does_not_gain_an_update_script(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "windows", "version": "0.9.72", "csrf": token},
+        files={
+            "package": (
+                "src.zip",
+                _zip({"src/daemon.py": "x", "VERSION": "0.9.72\n"}),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/windows").content)) as archive:
+        assert "update.bat" not in archive.namelist()
+
+
+def test_stored_frozen_zip_gains_the_update_script(tmp_path: Path):
+    from yaver_releases.store import ReleaseStore
+
+    store = ReleaseStore(tmp_path)
+    blob = tmp_path / "yaver.zip"
+    with zipfile.ZipFile(blob, "w") as archive:
+        archive.writestr("yaver.exe", b"exe")
+        archive.writestr("_internal/a", b"a")
+    raw = blob.read_bytes()
+    store.publish(
+        platform="windows",
+        version="0.9.72",
+        filename="yaver-windows.zip",
+        sha256=hashlib.sha256(raw).hexdigest(),
+        size=len(raw),
+        layout="frozen",
+        notes="",
+        blob=blob,
+    )
+    assert store.add_missing_updaters() == ["windows"]
+    path = store.blob_path("windows")
+    assert path is not None
+    file_bytes = path.read_bytes()
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+        assert archive.read("update.bat") == updater_bytes("update.bat")
+        assert archive.read("yaver.exe") == b"exe"
+    row = store.get("windows")
+    assert row is not None
+    assert row["filename"] == "yaver-windows.zip"
+    assert row["sha256"] == hashlib.sha256(file_bytes).hexdigest()
+    assert row["size"] == len(file_bytes)
+    assert store.add_missing_updaters() == []
 
 
 def test_a_latest_named_zip_publishes_the_version_file(tmp_path: Path):
@@ -443,8 +593,13 @@ def test_rejects_zip_slip_bad_version_and_replaces_the_previous_file(tmp_path: P
     )
     assert replaced.status_code == 303
     assert client.get("/download/ubuntu-22.04").content == second
+    assert client.get("/download/ubuntu-22.04/1.0.0").content == first
+    history = client.get("/releases")
+    assert 'id="release-1.0.1"' in history.text
+    assert 'id="release-1.0.0"' in history.text
+    assert history.text.index('id="release-1.0.1"') < history.text.index('id="release-1.0.0"')
     files = list((tmp_path / "data" / "files").glob("*.zip"))
-    assert len(files) == 1
+    assert len(files) == 2
 
     admin = client.get("/admin")
     token = _csrf(admin.text)
@@ -530,11 +685,11 @@ def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
     )
     assert saved.status_code == 303
     assert saved.headers["location"] == "/admin?saved=text"
-    home = client.get("/")
-    assert "Office copy" in home.text
-    assert "<script>alert" not in home.text
-    assert "&lt;script&gt;" in home.text
-    assert 'href="javascript:' not in home.text
+    history = client.get("/releases")
+    assert "Office copy" in history.text
+    assert "<script>alert" not in history.text
+    assert "&lt;script&gt;" in history.text
+    assert 'href="javascript:' not in history.text
     install = client.get("/install")
     assert "Custom install line." in install.text
     assert "Open this page from the address" not in install.text
@@ -548,7 +703,7 @@ def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
     )
     assert too_long.status_code == 400
     assert "20000" in too_long.text
-    assert "Office copy" in client.get("/").text
+    assert "Office copy" in client.get("/releases").text
 
     admin = client.get("/admin")
     token = _csrf(admin.text)
@@ -596,3 +751,389 @@ def test_dotenv_reads_the_file_next_to_the_executable(tmp_path: Path, monkeypatc
     monkeypatch.setattr("yaver_releases.paths.install_dir", lambda: exe_dir)
     load_dotenv()
     assert os.environ["YAVER_RELEASE_PORT"] == "18091"
+
+
+_BUNDLE_NAMES = {
+    "windows": "yaver-windows-x64-{version}.zip",
+    "ubuntu-18.04": "yaver-linux-x64-ubuntu-18.04-{version}.zip",
+    "ubuntu-20.04": "yaver-linux-x64-ubuntu-20.04-{version}.zip",
+    "ubuntu-22.04": "yaver-linux-x64-ubuntu-22.04-{version}.zip",
+    "ubuntu-24.04": "yaver-linux-x64-ubuntu-24.04-{version}.zip",
+}
+
+
+def _frozen_package(binary: str, version: str) -> bytes:
+    return _zip({binary: "bin", "_internal/a": "x", "VERSION": version + "\n"})
+
+
+def _executable_bundle(
+    version: str = "0.9.79",
+    *,
+    skip: set[str] | None = None,
+    versions: dict[str, str] | None = None,
+    extra: dict[str, bytes] | None = None,
+    wrap: str = "",
+) -> bytes:
+    files: dict[str, bytes] = {}
+    for platform, pattern in _BUNDLE_NAMES.items():
+        if skip and platform in skip:
+            continue
+        ver = (versions or {}).get(platform, version)
+        name = pattern.format(version=ver)
+        binary = "yaver.exe" if platform == "windows" else "yaver"
+        files[f"{wrap}{name}"] = _frozen_package(binary, ver)
+    if extra:
+        for name, payload in extra.items():
+            files[f"{wrap}{name}"] = payload
+    return _zip_bytes(files)
+
+
+def _zip_bytes(files: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, payload in files.items():
+            archive.writestr(name, payload)
+    return buffer.getvalue()
+
+
+def test_home_lists_each_ubuntu_download(tmp_path: Path):
+    client = _client(tmp_path)
+    home = client.get("/")
+    assert home.status_code == 200
+    assert "<h2>Ubuntu 18.04</h2>" in home.text
+    assert "<h2>Ubuntu 20.04</h2>" in home.text
+    assert "<h2>Ubuntu 22.04</h2>" in home.text
+    assert "<h2>Ubuntu 24.04</h2>" in home.text
+    assert "<h2>Windows</h2>" in home.text
+    install = client.get("/install")
+    assert 'id="ubuntu-18.04"' in install.text
+    assert "http://testserver/download/ubuntu-22.04" in install.text
+
+
+def test_bundle_upload_reads_the_version_from_the_zip_names(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    admin = client.get("/admin")
+    assert 'value="ubuntu-18.04"' not in admin.text
+    assert 'name="kind" value="bundle"' in admin.text
+    token = _csrf(admin.text)
+    published = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "notes": "Office <b>build</b>", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    assert published.headers["location"] == "/admin?uploaded=bundle"
+
+    history = client.get("/releases")
+    assert "0.9.79" in history.text
+    assert "Office &lt;b&gt;build&lt;/b&gt;" in history.text
+    assert 'href="/download/windows/0.9.79"' in history.text
+    assert 'href="/download/ubuntu-18.04/0.9.79"' in history.text
+    assert 'href="/download/ubuntu-20.04/0.9.79"' in history.text
+    assert 'href="/download/ubuntu-22.04/0.9.79"' in history.text
+    assert 'href="/download/ubuntu-24.04/0.9.79"' in history.text
+    assert 'id="release-0.9.79"' in history.text
+
+    windows = client.get("/api/latest?platform=windows").json()
+    ubuntu = client.get("/api/latest?platform=ubuntu-22.04").json()
+    assert windows["version"] == "0.9.79"
+    assert ubuntu["version"] == "0.9.79"
+    assert windows["filename"] == "yaver-windows-x64-0.9.79.zip"
+    assert ubuntu["filename"] == "yaver-linux-x64-ubuntu-22.04-0.9.79.zip"
+    assert windows["layout"] == "frozen"
+    assert ubuntu["sha256"] != windows["sha256"]
+
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/windows").content)) as archive:
+        assert archive.read("update.bat") == updater_bytes("update.bat")
+        assert "yaver.exe" in archive.namelist()
+    with zipfile.ZipFile(io.BytesIO(client.get("/download/ubuntu-24.04").content)) as archive:
+        assert archive.read("update.sh") == updater_bytes("update.sh")
+        assert (archive.getinfo("update.sh").external_attr >> 16) & 0o777 == 0o755
+    assert client.get("/download/ubuntu-18.04").status_code == 200
+    assert client.get("/download/ubuntu-20.04").status_code == 200
+
+    admin = client.get(published.headers["location"])
+    assert "Published the Windows, Ubuntu 18.04, Ubuntu 20.04, Ubuntu 22.04, and Ubuntu 24.04 packages." in admin.text
+    assert "Ubuntu 22.04" in admin.text
+
+
+def test_bundle_upload_reads_release_notes_txt(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    note = (
+        "# Yaver 0.9.79\n\n"
+        "See <script>alert(1)</script> and `update.bat`.\n\n"
+        "The second paragraph stays."
+    )
+    published = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "notes": "typed in the form", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(extra={"RELEASE_NOTES.txt": note.encode("utf-8")}),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    history = client.get("/releases")
+    assert history.status_code == 200
+    assert "typed in the form" not in history.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in history.text
+    assert "<script>alert" not in history.text
+    assert "<code>update.bat</code>" in history.text
+    assert "The second paragraph stays." in history.text
+    assert history.text.count("The second paragraph stays.") == 1
+    assert 'class="release-note"' in history.text
+    windows = client.get("/api/latest?platform=windows").json()
+    ubuntu = client.get("/api/latest?platform=ubuntu-24.04").json()
+    assert windows["notes"] == note.strip()
+    assert ubuntu["notes"] == note.strip()
+
+    token = _csrf(client.get("/admin").text)
+    older = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.72.zip",
+                _executable_bundle(
+                    "0.9.72",
+                    extra={"RELEASE_NOTES.txt": b"The 0.9.72 note.\n"},
+                ),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert older.status_code == 303
+    both = client.get("/releases").text
+    assert "The second paragraph stays." in both
+    assert "The 0.9.72 note." in both
+
+    token = _csrf(client.get("/admin").text)
+    empty = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.80.zip",
+                _executable_bundle("0.9.80", extra={"RELEASE_NOTES.txt": b"  \n"}),
+                "application/zip",
+            )
+        },
+    )
+    assert empty.status_code == 400
+    assert "empty" in empty.text.lower()
+    assert client.get("/api/latest?platform=windows").json()["version"] == "0.9.79"
+
+    token = _csrf(client.get("/admin").text)
+    binary = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.80.zip",
+                _executable_bundle("0.9.80", extra={"RELEASE_NOTES.txt": b"\xff\xfe"}),
+                "application/zip",
+            )
+        },
+    )
+    assert binary.status_code == 400
+    assert "UTF-8" in binary.text
+
+    token = _csrf(client.get("/admin").text)
+    wrapped = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "drop.zip",
+                _executable_bundle(
+                    "0.9.71",
+                    extra={"RELEASE_NOTES.txt": "Wrapped note.\n".encode("utf-8")},
+                    wrap="yaver-executables-0.9.71/",
+                ),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert wrapped.status_code == 303
+    assert "Wrapped note." in client.get("/releases").text
+
+    token = _csrf(client.get("/admin").text)
+    huge = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.81.zip",
+                _executable_bundle("0.9.81", extra={"RELEASE_NOTES.txt": b"a" * 70000}),
+                "application/zip",
+            )
+        },
+    )
+    assert huge.status_code == 400
+    assert "too long" in huge.text.lower()
+    assert client.get("/api/latest?platform=windows").json()["version"] == "0.9.79"
+
+
+def test_bundle_upload_rejects_a_partial_set_and_keeps_the_old_file(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    first = client.post(
+        "/admin/upload",
+        data={"platform": "windows", "version": "0.9.72", "csrf": token},
+        files={
+            "package": (
+                "yaver-windows.zip",
+                _zip({"yaver.exe": "old", "_internal/a": "x"}),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert first.status_code == 303
+    previous = client.get("/download/windows").content
+
+    token = _csrf(client.get("/admin").text)
+    rejected = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(skip={"ubuntu-20.04"}),
+                "application/zip",
+            )
+        },
+    )
+    assert rejected.status_code == 400
+    assert "Ubuntu 20.04" in rejected.text
+    assert client.get("/download/windows").content == previous
+    assert client.get("/api/latest?platform=ubuntu-18.04").status_code == 404
+    assert len(list((tmp_path / "data" / "files").glob("*.zip"))) == 1
+
+
+def test_bundle_upload_refuses_a_version_that_disagrees_with_the_name(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    files = {}
+    for platform, pattern in _BUNDLE_NAMES.items():
+        binary = "yaver.exe" if platform == "windows" else "yaver"
+        inside = "0.9.78" if platform == "windows" else "0.9.79"
+        files[pattern.format(version="0.9.79")] = _frozen_package(binary, inside)
+    rejected = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={"package": ("yaver-executables-0.9.79.zip", _zip_bytes(files), "application/zip")},
+    )
+    assert rejected.status_code == 400
+    assert "0.9.78" in rejected.text
+    assert client.get("/api/latest?platform=windows").status_code == 404
+    assert client.get("/api/latest?platform=ubuntu-22.04").status_code == 404
+
+
+def test_bundle_upload_accepts_one_wrapping_folder(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    published = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "drop.zip",
+                _executable_bundle(wrap="yaver-executables-0.9.79/"),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    assert client.get("/api/latest?platform=ubuntu-18.04").json()["version"] == "0.9.79"
+
+
+def test_bundle_upload_uses_the_file_name_when_version_is_absent(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    files: dict[str, bytes] = {}
+    for platform, pattern in _BUNDLE_NAMES.items():
+        binary = "yaver.exe" if platform == "windows" else "yaver"
+        files[pattern.format(version="0.9.79")] = _zip({binary: "bin", "_internal/a": "x"})
+    published = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={"package": ("yaver-executables-0.9.79.zip", _zip_bytes(files), "application/zip")},
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    assert client.get("/api/latest?platform=windows").json()["version"] == "0.9.79"
+    assert client.get("/api/latest?platform=ubuntu-20.04").json()["version"] == "0.9.79"
+
+
+def test_bundle_upload_rejects_an_extra_file_a_bad_outer_name_and_a_parent_path(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    extra = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(extra={"notes.txt": b"no"}),
+                "application/zip",
+            )
+        },
+    )
+    assert extra.status_code == 400
+    assert "five versioned" in extra.text
+    assert client.get("/api/latest?platform=windows").status_code == 404
+
+    token = _csrf(client.get("/admin").text)
+    outer = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.80.zip",
+                _executable_bundle("0.9.79"),
+                "application/zip",
+            )
+        },
+    )
+    assert outer.status_code == 400
+    assert "0.9.80" in outer.text
+    assert "0.9.79" in outer.text
+
+    token = _csrf(client.get("/admin").text)
+    slipped = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _zip_bytes({"../yaver-windows-x64-0.9.79.zip": b"no"}),
+                "application/zip",
+            )
+        },
+    )
+    assert slipped.status_code == 400
+    assert "parent path" in slipped.text
+    assert list((tmp_path / "data" / "files").glob("*.zip")) == []
