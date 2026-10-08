@@ -144,6 +144,8 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert install.text.count("setsid nohup ./yaver start") == 4
     assert install.text.count("nano .env") == 5
     assert "notepad .env" in install.text
+    assert ".\\install-agents.bat" in install.text
+    assert install.text.count("./install-agents.sh") == 4
     assert install.text.count("./update.sh") == 4
     windows_at = install.text.index('id="windows"')
     windows_update = install.text.index("update.bat")
@@ -154,6 +156,15 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     ubuntu22_block = install.text[ubuntu22:ubuntu24]
     assert "unzip -o /tmp/yaver-22.04.zip" in ubuntu22_block
     assert "nano .env" in ubuntu22_block
+    assert "./install-agents.sh" in ubuntu22_block
+    assert "sudo ufw allow 8080" in ubuntu22_block
+    assert "8080/tcp" not in ubuntu22_block
+    assert "8080/udp" not in ubuntu22_block
+    assert install.text.count("sudo ufw allow 8080") == 4
+    assert ubuntu22_block.index("./install-agents.sh") < ubuntu22_block.index("nano .env")
+    assert ubuntu22_block.index("nano .env") < ubuntu22_block.index("sudo ufw allow 8080")
+    windows_block = install.text[windows_at:ubuntu18]
+    assert windows_block.index("install-agents.bat") < windows_block.index("notepad .env")
     assert "./update.sh" in ubuntu22_block
     assert "yaver-18.04.zip" not in ubuntu22_block
     assert "Start again later" not in install.text

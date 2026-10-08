@@ -58,9 +58,11 @@ mkdir -p "$HOME/yaver"
 curl -fL -o /tmp/yaver-{version}.zip "{{{token}}}"
 unzip -o /tmp/yaver-{version}.zip -d "$HOME/yaver"
 cd "$HOME/yaver"
+chmod 755 yaver install-agents.sh
+./install-agents.sh
 if [ ! -f .env ]; then cp .env.example .env; fi
 nano .env
-chmod 755 yaver
+sudo ufw allow 8080
 setsid nohup ./yaver start > yaver.log 2>&1 < /dev/null &
 ```
 """
@@ -94,7 +96,7 @@ DEFAULTS: dict[str, str] = {
         "the commands. Everyone installs the executable. The commands "
         "download that zip, unpack it, and start Yaver."
     ),
-    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, `.env.example`, and `update.bat`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
+    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, `.env.example`, `install-agents.bat`, and `update.bat`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
 
 PowerShell:
 
@@ -103,6 +105,7 @@ curl.exe -fL -o yaver-windows.zip "{windows}"
 New-Item -ItemType Directory -Force -Path yaver | Out-Null
 tar.exe -xf yaver-windows.zip -C yaver
 cd yaver
+.\\install-agents.bat
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 .\\yaver.exe
@@ -124,8 +127,8 @@ update.bat
         "`nano .env` opens that file. If nano is missing, run "
         "`sudo apt-get install -y nano` once. Run Yaver as the account "
         "that should own the work. Do not use root. The log is `yaver.log` "
-        "in that folder. Open [http://127.0.0.1:8080](http://127.0.0.1:8080) "
-        "on that machine."
+        "in that folder. The commands allow TCP and UDP port 8080 in ufw. Open "
+        "[http://127.0.0.1:8080](http://127.0.0.1:8080) on that machine."
     ),
     "ubuntu18": _ubuntu_steps("18.04", "ubuntu18"),
     "ubuntu20": _ubuntu_steps("20.04", "ubuntu20"),
