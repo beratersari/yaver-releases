@@ -216,6 +216,22 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "yaver update" not in home.text
 
 
+def test_install_cards_are_not_underlined_like_certificate_links(tmp_path: Path):
+    client = _client(tmp_path)
+    css = client.get("/static/site.css")
+    assert css.status_code == 200
+    start = css.text.index(".need a:not(.button)")
+    selector = css.text[start:css.text.index("{", start)]
+    assert ":not(.need-card)" in selector
+    install = client.get("/install").text
+    assert 'class="need-card is-required"' in install
+    assert install.count('class="need-card"') == 2
+    deps = client.get("/dependencies").text
+    cert = deps.split('id="network-certificate"', 1)[1].split("</section>", 1)[0]
+    assert cert.count(">Download it</a>") == 2
+    assert "need-card" not in cert
+
+
 def test_flatten_wrapper_removes_one_folder_and_keeps_a_flat_zip(tmp_path: Path):
     wrapped = tmp_path / "wrapped.zip"
     info = zipfile.ZipInfo("bundle/yaver")

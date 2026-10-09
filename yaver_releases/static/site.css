@@ -502,7 +502,7 @@ p { margin: 0.35rem 0 0.8rem; }
 
 .artifacts .button { margin-top: 0; }
 
-.need a:not(.button) {
+.need a:not(.button):not(.need-card) {
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }
