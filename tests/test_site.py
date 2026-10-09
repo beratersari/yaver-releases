@@ -1589,6 +1589,34 @@ def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):
     assert "innerHTML" not in script.text
 
 
+def test_static_types_survive_a_plain_text_windows_map(tmp_path: Path):
+    """Windows has no .woff2 type, and some machines map .js to text/plain.
+
+    nosniff then blocks the file. A blocked theme.js leaves the night/light
+    switch dead. A blocked font is the MIME error in the network panel.
+    """
+    import mimetypes
+
+    mimetypes.init()
+    mimetypes.add_type("text/plain", ".js", strict=True)
+    mimetypes.add_type("text/plain", ".css", strict=True)
+    mimetypes.types_map.pop(".woff2", None)
+    client = _client(tmp_path)
+    mimetypes.add_type("text/plain", ".js", strict=True)
+    mimetypes.add_type("text/plain", ".css", strict=True)
+    mimetypes.types_map.pop(".woff2", None)
+
+    js = client.get("/static/theme.js")
+    css = client.get("/static/site.css")
+    font = client.get("/static/fonts/geist-latin-wght-normal.woff2")
+    assert js.status_code == 200
+    assert js.headers["content-type"].split(";")[0] == "text/javascript"
+    assert css.headers["content-type"].split(";")[0] == "text/css"
+    assert font.status_code == 200
+    assert font.headers["content-type"].split(";")[0] == "font/woff2"
+    assert js.headers["x-content-type-options"] == "nosniff"
+
+
 def test_edge_keeps_the_night_and_light_switch(tmp_path: Path):
     """Edge drops the "only" keyword from the colorScheme property and then
     repaints the page with its own colors. The served page has to opt out

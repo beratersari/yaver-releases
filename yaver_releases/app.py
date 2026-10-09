@@ -44,6 +44,7 @@ from yaver_releases.copy import (
     tokens_from_url,
 )
 from yaver_releases import paths
+from yaver_releases.static_types import media_type_for
 from yaver_releases.platforms import (
     DEPENDENCIES,
     PLATFORMS,
@@ -117,6 +118,21 @@ _MAX_UPLOAD = 8 * 1024 * 1024 * 1024
 _FAILS: dict[str, list[float]] = {}
 
 
+class _TypedStaticFiles(StaticFiles):
+    """Set script, style, and font types from the suffix, not the OS map."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):  # type: ignore[no-untyped-def]
+        response = super().file_response(
+            full_path, stat_result, scope, status_code=status_code
+        )
+        media = media_type_for(str(full_path))
+        if media and getattr(response, "status_code", 200) != 304:
+            response.headers["content-type"] = media
+            if hasattr(response, "media_type"):
+                response.media_type = media
+        return response
+
+
 def create_app(
     *,
     data_dir: Path | None = None,
@@ -142,7 +158,7 @@ def create_app(
     app.state.admin_user = user
     app.state.admin_password = password
     app.state.secret = signing
-    app.mount("/static", StaticFiles(directory=str(_ROOT / "static")), name="static")
+    app.mount("/static", _TypedStaticFiles(directory=str(_ROOT / "static")), name="static")
 
     @app.middleware("http")
     async def _headers(request: Request, call_next):
