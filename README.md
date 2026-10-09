@@ -26,7 +26,7 @@ Build that zip from this repository on Windows:
 .venv\Scripts\python packaging\pyinstaller\build.py
 ```
 
-The zip is `dist\yaver-releases-windows-x64-1.2.0.zip`. Its root is the executable and the files next to it. The folder name is not inside the zip.
+The zip is `dist\yaver-releases-windows-x64-1.3.0.zip`. Its root is the executable and the files next to it. The folder name is not inside the zip.
 
 The site listens on `0.0.0.0:8090` unless `YAVER_RELEASE_HOST` and `YAVER_RELEASE_PORT` say otherwise. Open `http://127.0.0.1:8090`.
 
