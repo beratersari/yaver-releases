@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import logging
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -51,10 +54,28 @@ from yaver_releases.platforms import (
     split_executable_bundle,
     version_from_zip,
 )
+from yaver_releases.install_fetch import fetch_install_analytics
 from yaver_releases.store import ReleaseStore
 
 _ROOT = Path(__file__).resolve().parent
-_TEMPLATES = Jinja2Templates(directory=str(_ROOT / "templates"))
+
+
+def _template_context(request: Request) -> dict[str, bool]:
+    """Analytics stays on the admin pages, and only for a signed-in admin."""
+    app = request.app
+    secret = getattr(app.state, "secret", "")
+    signed = read_session(secret, request.cookies.get(COOKIE) or "") is not None
+    path = (request.url.path or "/").rstrip("/") or "/"
+    on_admin = path == "/admin" or path.startswith("/admin/analytics")
+    return {"show_analytics_nav": signed and on_admin}
+
+
+_TEMPLATES = Jinja2Templates(
+    directory=str(_ROOT / "templates"),
+    context_processors=[_template_context],
+)
+_LOG = logging.getLogger("yaver_releases")
+_CLIENT_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$")
 
 
 def _format_size(value: object) -> str:
@@ -140,15 +161,11 @@ def create_app(
         }
 
     @app.get("/api/latest")
-    def latest(platform: str = "") -> dict:
-        key = _platform_or_404(platform)
-        row = store.get(key)
-        if row is None or not row.get("version"):
-            raise HTTPException(status_code=404, detail=f"No {PLATFORMS[key]} release is published.")
-        return row
+    def latest(request: Request, platform: str = "", current: str = "") -> dict:
+        return _serve_latest(store, request, platform, current)
 
     @app.get("/download/{platform}/{version}")
-    def download_version(platform: str, version: str) -> FileResponse:
+    def download_version(platform: str, version: str, request: Request) -> FileResponse:
         key = _package_or_404(platform)
         try:
             ver = require_version(version)
@@ -161,10 +178,17 @@ def create_app(
                 status_code=404,
                 detail=f"No {package_label(key)} {ver} release is published.",
             )
+        _remember_install(
+            store,
+            request,
+            kind="download",
+            platform=key,
+            published_version=ver,
+        )
         return _zip_response(path, row["filename"])
 
     @app.get("/download/{platform}")
-    def download(platform: str) -> FileResponse:
+    def download(platform: str, request: Request) -> FileResponse:
         key = _package_or_404(platform)
         row = store.get(key)
         path = store.blob_path(key)
@@ -173,6 +197,13 @@ def create_app(
                 status_code=404,
                 detail=f"No {package_label(key)} release is published.",
             )
+        _remember_install(
+            store,
+            request,
+            kind="download",
+            platform=key,
+            published_version=str(row.get("version") or ""),
+        )
         return _zip_response(path, row["filename"])
 
     @app.get("/", response_class=HTMLResponse)
@@ -240,6 +271,38 @@ def create_app(
         response = RedirectResponse("/admin/login", status_code=303)
         response.delete_cookie(COOKIE, path="/")
         return response
+
+    @app.get("/admin/analytics", response_class=HTMLResponse)
+    def analytics(request: Request, ip: str = "") -> HTMLResponse:
+        session = _session_or_redirect(request, app)
+        if isinstance(session, RedirectResponse):
+            return session
+        chosen = _clean_ip(ip)
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "analytics.html",
+            {
+                "selected_ip": chosen,
+                "known": store.list_installations(),
+                "detail": _with_live_analytics(store, chosen),
+                "csrf": str(session.get("csrf") or ""),
+            },
+        )
+
+    @app.get("/api/admin/installations")
+    def installations_api(request: Request, ip: str = "") -> dict:
+        """Install list for the admin page and for one Yaver that has the admin password.
+
+        The public download API does not serve this. A missing or wrong
+        password is 403, with no browser login prompt.
+        """
+        if not _admin_reader(request, app):
+            raise HTTPException(status_code=403, detail="Sign in again.")
+        chosen = _clean_ip(ip)
+        return {
+            "installations": store.list_installations(),
+            "selected": _with_live_analytics(store, chosen),
+        }
 
     @app.get("/admin", response_class=HTMLResponse)
     def admin(request: Request, uploaded: str = "", saved: str = "") -> HTMLResponse:
@@ -342,6 +405,110 @@ def create_app(
         return RedirectResponse("/admin?saved=reset", status_code=303)
 
     return app
+
+
+def _clean_ip(value: str) -> str:
+    text = (value or "").strip()
+    if not text or len(text) > 64 or any(char in text for char in "\r\n\x00 <>"):
+        return ""
+    return text
+
+
+def _clean_client_version(value: str) -> str:
+    text = (value or "").strip()
+    if not _CLIENT_VERSION.fullmatch(text):
+        return ""
+    return text
+
+
+def _with_live_analytics(store: ReleaseStore, ip: str) -> dict | None:
+    """One known address, plus a live Analytics read. Unknown addresses are not called."""
+    chosen = (ip or "").strip()
+    if not chosen:
+        return None
+    detail = store.installation_detail(chosen)
+    if detail is None:
+        return None
+    out = dict(detail)
+    out.pop("usage", None)
+    usage, error = fetch_install_analytics(str(out.get("ip") or ""))
+    out["usage"] = usage
+    out["usage_error"] = error
+    return out
+
+
+def _serve_latest(
+    store: ReleaseStore,
+    request: Request,
+    platform: str,
+    current: str,
+) -> dict:
+    key = _platform_or_404(platform)
+    row = store.get(key)
+    published = str((row or {}).get("version") or "")
+    _remember_install(
+        store,
+        request,
+        kind="latest",
+        platform=key,
+        client_version=_clean_client_version(current),
+        published_version=published,
+    )
+    if row is None or not published:
+        raise HTTPException(
+            status_code=404, detail=f"No {PLATFORMS[key]} release is published."
+        )
+    return row
+
+
+def _remember_install(
+    store: ReleaseStore,
+    request: Request,
+    *,
+    kind: str,
+    platform: str,
+    client_version: str = "",
+    published_version: str = "",
+) -> None:
+    ip = _clean_ip(request.client.host if request.client else "")
+    if not ip:
+        return
+    try:
+        store.record_install_hit(
+            ip=ip,
+            kind=kind,
+            platform=platform,
+            client_version=client_version,
+            published_version=published_version,
+        )
+    except Exception as exc:
+        _LOG.warning("Could not record install request: %s", exc)
+
+
+def _basic_admin(request: Request, app: FastAPI) -> bool:
+    header = request.headers.get("authorization") or ""
+    if not header.lower().startswith("basic "):
+        return False
+    if not app.state.admin_user or not app.state.admin_password:
+        return False
+    try:
+        decoded = base64.b64decode(header.split(" ", 1)[1].strip(), validate=True)
+        text = decoded.decode("utf-8")
+    except (ValueError, UnicodeError):
+        return False
+    username, separator, password = text.partition(":")
+    if not separator:
+        return False
+    return passwords_match(app.state.admin_user, username) and passwords_match(
+        app.state.admin_password, password
+    )
+
+
+def _admin_reader(request: Request, app: FastAPI) -> bool:
+    """Admin cookie or the same username and password over HTTP Basic."""
+    if _session(request, app) is not None:
+        return True
+    return _basic_admin(request, app)
 
 
 def _platform_or_404(value: str) -> str:

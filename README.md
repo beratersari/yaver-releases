@@ -78,7 +78,9 @@ A PC running the executable will not install a full install zip, and a full inst
 
 `GET /api/health` returns `{"ok": true}`.
 
-`GET /api/latest?platform=windows` returns the current package. `platform` is `windows`, `ubuntu-18.04`, `ubuntu-20.04`, `ubuntu-22.04`, or `ubuntu-24.04`.
+`GET /api/latest?platform=windows` returns the current package. `platform` is `windows`, `ubuntu-18.04`, `ubuntu-20.04`, `ubuntu-22.04`, or `ubuntu-24.04`. An optional `current` is the version that install is running. Each version check and each download is stored by the caller's address. The version check does not include Analytics. Update scripts use this GET.
+
+A signed-in admin sees Analytics in the left bar on the publish page and on `/admin/analytics`. The list shows every address with its version, platform, and last contact. Selecting an address makes this site GET `http://{address}:8080/api/analytics/install` and show that install’s jobs, merge requests, and the other counts. The install, release history, and dependencies pages do not show that item. No extra setting is required. An address that has not checked in, a hostname, or a link-local address is not requested. `GET /api/admin/installations` returns the same list to that signed-in admin, or to HTTP Basic using the existing admin username and password. A missing password is rejected. The public pages do not link to it. The install’s own Analytics page stays behind that install’s dashboard password.
 
 ```json
 {

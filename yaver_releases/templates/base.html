@@ -53,6 +53,12 @@
           <span class="idx">03</span>
           <span>Dependencies</span>
         </a>
+        {% if show_analytics_nav %}
+        <a href="/admin/analytics" class="{% if path.startswith('/admin/analytics') %}active{% endif %}" {% if path.startswith('/admin/analytics') %}aria-current="page"{% endif %}>
+          <span class="idx">04</span>
+          <span>Analytics</span>
+        </a>
+        {% endif %}
       </nav>
       <p class="side-foot">Downloads stay open on this network.</p>
     </aside>

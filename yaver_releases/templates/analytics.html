@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Analytics · Yaver releases{% endblock %}
+{% block body %}
+<p class="kicker">Admin</p>
+<h1>Analytics</h1>
+<p class="lede">Each address is one Yaver install. Select it to load that install’s jobs, merge requests, and the other Analytics counts, with its version, platform, and last contact.</p>
+<p><a href="/admin">Back to publish</a></p>
+
+{% if not known %}
+<p class="quiet">No installation has asked for a release yet.</p>
+{% else %}
+<form class="panel" method="get" action="/admin/analytics">
+  <label for="ip">Show one address</label>
+  <select id="ip" name="ip" onchange="this.form.submit()">
+    <option value="">All addresses</option>
+    {% for row in known %}
+    <option value="{{ row.ip }}" {% if row.ip == selected_ip %}selected{% endif %}>
+      {{ row.ip }}{% if row.client_version %} · {{ row.client_version }}{% endif %}{% if row.platform %} · {{ row.platform }}{% endif %}
+    </option>
+    {% endfor %}
+  </select>
+</form>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Address</th>
+      <th>Version</th>
+      <th>Platform</th>
+      <th>Last contact</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in known %}
+    <tr>
+      <td><a href="/admin/analytics?ip={{ row.ip }}">{{ row.ip }}</a></td>
+      <td>{{ row.client_version or "—" }}</td>
+      <td>{{ row.platform or "—" }}</td>
+      <td>{{ row.last_seen }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if selected_ip and not detail %}
+<p class="quiet">No requests from {{ selected_ip }}.</p>
+{% endif %}
+
+{% if detail %}
+<h2>{{ detail.ip }}</h2>
+<p class="quiet">Version {{ detail.client_version or "—" }}. Platform {{ detail.platform or "—" }}. Last contact {{ detail.last_seen }}.</p>
+{% if not detail.usage %}
+<p class="quiet">{{ detail.usage_error or "Could not read Analytics from this install." }}</p>
+{% else %}
+<p class="quiet">Counts are all of this install’s jobs.</p>
+<div class="stats">
+  <div class="stat"><span class="num">{{ detail.usage.jobs }}</span><span class="lbl">Jobs</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.completed }}</span><span class="lbl">Completed</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.error }}</span><span class="lbl">Error</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.cancelled }}</span><span class="lbl">Cancelled</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.in_flight }}</span><span class="lbl">In flight</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.plan_ready }}</span><span class="lbl">Plan ready</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.merge_requests }}</span><span class="lbl">Merge requests</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.opened }}</span><span class="lbl">Open</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.merged }}</span><span class="lbl">Merged</span></div>
+  <div class="stat"><span class="num">{{ detail.usage.closed }}</span><span class="lbl">Closed</span></div>
+</div>
+
+<h3>Opened by us</h3>
+<p class="quiet">Merge requests this install opened. Open {{ detail.usage.ours.opened }}. Merged {{ detail.usage.ours.merged }}. Closed {{ detail.usage.ours.closed }}. Total {{ detail.usage.ours.total }}.</p>
+<h3>Contributed</h3>
+<p class="quiet">Existing merge requests a follow-up worked on. Open {{ detail.usage.contributed.opened }}. Merged {{ detail.usage.contributed.merged }}. Closed {{ detail.usage.contributed.closed }}. Total {{ detail.usage.contributed.total }}.</p>
+
+{% macro breakdown(title, rows, outcomes) %}
+{% if rows %}
+<h3>{{ title }}</h3>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Jobs</th>
+      {% if outcomes %}
+      <th>Completed</th>
+      <th>Error</th>
+      <th>Cancelled</th>
+      <th>In flight</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in rows %}
+    <tr>
+      <td>{{ item.label }}</td>
+      <td>{{ item.jobs }}</td>
+      {% if outcomes %}
+      <td>{{ item.completed }}</td>
+      <td>{{ item.error }}</td>
+      <td>{{ item.cancelled }}</td>
+      <td>{{ item.in_flight }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endmacro %}
+{{ breakdown("By category", detail.usage.categories, True) }}
+{{ breakdown("By source", detail.usage.sources, True) }}
+{{ breakdown("By model", detail.usage.models, True) }}
+{{ breakdown("By backend", detail.usage.backends, True) }}
+{{ breakdown("By agent", detail.usage.agents, True) }}
+{{ breakdown("By repository", detail.usage.repositories, False) }}
+{{ breakdown("By status", detail.usage.statuses, False) }}
+{% endif %}
+
+{% if detail.events %}
+<h3>Recent requests</h3>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Request</th>
+      <th>Platform</th>
+      <th>Installed</th>
+      <th>Published</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for event in detail.events %}
+    <tr>
+      <td>{{ event.seen_at }}</td>
+      <td>{% if event.kind == "download" %}Download{% else %}Version check{% endif %}</td>
+      <td>{{ event.platform or "—" }}</td>
+      <td>{{ event.client_version or "—" }}</td>
+      <td>{{ event.published_version or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

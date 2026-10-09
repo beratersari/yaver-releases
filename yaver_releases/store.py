@@ -7,6 +7,7 @@ keeps every version that was published.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -89,6 +90,31 @@ class ReleaseStore:
                     key TEXT PRIMARY KEY,
                     body TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS install_hits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ip TEXT NOT NULL,
+                    seen_at TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    client_version TEXT NOT NULL,
+                    published_version TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_install_hits_ip ON install_hits(ip, id)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS install_usage (
+                    ip TEXT PRIMARY KEY,
+                    reported_at TEXT NOT NULL,
+                    payload TEXT NOT NULL
                 )
                 """
             )
@@ -397,6 +423,168 @@ class ReleaseStore:
     def clear_copy(self) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM page_copy")
+
+    def record_install_hit(
+        self,
+        *,
+        ip: str,
+        kind: str,
+        platform: str,
+        client_version: str = "",
+        published_version: str = "",
+    ) -> None:
+        """Remember one version check or download. The caller already cleaned the fields."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO install_hits (
+                    ip, seen_at, kind, platform, client_version, published_version
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (ip, _now(), kind, platform, client_version, published_version),
+            )
+            conn.execute(
+                """
+                DELETE FROM install_hits
+                WHERE id NOT IN (
+                    SELECT id FROM install_hits ORDER BY id DESC LIMIT 20000
+                )
+                """
+            )
+
+    def save_install_usage(self, *, ip: str, payload: dict) -> None:
+        """Replace the analytics snapshot for one address. The payload is already cleaned."""
+        text = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+        if len(text) > 65536:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO install_usage (ip, reported_at, payload)
+                VALUES (?, ?, ?)
+                ON CONFLICT(ip) DO UPDATE SET
+                    reported_at = excluded.reported_at,
+                    payload = excluded.payload
+                """,
+                (ip, _now(), text),
+            )
+
+    def list_installations(self) -> list[dict]:
+        """One row per address, most recently seen first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT h.ip, h.seen_at, h.kind, h.platform, h.client_version,
+                       h.published_version, c.hits, c.first_seen
+                FROM install_hits h
+                JOIN (
+                    SELECT ip, MAX(id) AS id, COUNT(*) AS hits, MIN(seen_at) AS first_seen
+                    FROM install_hits
+                    GROUP BY ip
+                ) c ON c.id = h.id
+                ORDER BY h.seen_at DESC, h.ip ASC
+                """
+            ).fetchall()
+        # Counts come from a live GET when an admin selects one address.
+        # A stored install_usage row is not the list.
+        return [self._installation_summary(row) for row in rows]
+
+    def installations_with_events(self, *, per_ip: int = 40) -> list[dict]:
+        """Every address, with its newest requests. Empty when nobody has checked in."""
+        cap = max(1, min(int(per_ip), 100))
+        summaries = self.list_installations()
+        grouped: dict[str, list[dict]] = {}
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT ip, seen_at, kind, platform, client_version, published_version
+                FROM install_hits
+                ORDER BY id DESC
+                """
+            ).fetchall()
+        for row in rows:
+            ip = str(row["ip"])
+            events = grouped.setdefault(ip, [])
+            if len(events) >= cap:
+                continue
+            events.append(
+                {
+                    "seen_at": str(row["seen_at"]),
+                    "kind": str(row["kind"]),
+                    "platform": str(row["platform"]),
+                    "client_version": str(row["client_version"]),
+                    "published_version": str(row["published_version"]),
+                }
+            )
+        details: list[dict] = []
+        for summary in summaries:
+            detail = dict(summary)
+            detail["events"] = grouped.get(summary["ip"], [])
+            details.append(detail)
+        return details
+
+    def installation_detail(self, ip: str, *, limit: int = 40) -> dict | None:
+        """Summary plus the newest requests from one address."""
+        wanted = (ip or "").strip()
+        if not wanted:
+            return None
+        summary = next((row for row in self.list_installations() if row["ip"] == wanted), None)
+        if summary is None:
+            return None
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT seen_at, kind, platform, client_version, published_version
+                FROM install_hits
+                WHERE ip = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (wanted, max(1, min(int(limit), 100))),
+            ).fetchall()
+        detail = dict(summary)
+        detail["events"] = [
+            {
+                "seen_at": str(row["seen_at"]),
+                "kind": str(row["kind"]),
+                "platform": str(row["platform"]),
+                "client_version": str(row["client_version"]),
+                "published_version": str(row["published_version"]),
+            }
+            for row in rows
+        ]
+        return detail
+
+    def _usage_by_ip(self) -> dict[str, dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT ip, reported_at, payload FROM install_usage"
+            ).fetchall()
+        found: dict[str, dict] = {}
+        for row in rows:
+            try:
+                payload = json.loads(str(row["payload"]))
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            snapshot = dict(payload)
+            snapshot["reported_at"] = str(row["reported_at"])
+            found[str(row["ip"])] = snapshot
+        return found
+
+    @staticmethod
+    def _installation_summary(row: sqlite3.Row) -> dict:
+        return {
+            "ip": str(row["ip"]),
+            "hits": int(row["hits"]),
+            "first_seen": str(row["first_seen"]),
+            "last_seen": str(row["seen_at"]),
+            "last_kind": str(row["kind"]),
+            "platform": str(row["platform"]),
+            "client_version": str(row["client_version"]),
+            "published_version": str(row["published_version"]),
+        }
 
     def delete(self, platform: str) -> None:
         paths = [

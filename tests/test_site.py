@@ -3,17 +3,28 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
+import json
 import os
+import threading
 import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from yaver_releases.app import create_app
+from yaver_releases.install_fetch import INSTALL_ANALYTICS_TOKEN
 from yaver_releases.dotenv import load_dotenv
 from yaver_releases.platforms import classify_members, flatten_wrapper, updater_bytes
+
+
+@pytest.fixture(autouse=True)
+def _do_not_call_a_live_dashboard(monkeypatch):
+    """Analytics fetches in these tests must not open port 8080."""
+    monkeypatch.setattr("yaver_releases.install_fetch.INSTALL_ANALYTICS_PORT", 9)
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -1148,3 +1159,232 @@ def test_bundle_upload_rejects_an_extra_file_a_bad_outer_name_and_a_parent_path(
     assert slipped.status_code == 400
     assert "parent path" in slipped.text
     assert list((tmp_path / "data" / "files").glob("*.zip")) == []
+
+
+def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
+    client = _client(tmp_path)
+    assert client.get("/api/admin/installations").status_code == 403
+    assert client.get("/admin/analytics", follow_redirects=False).status_code == 303
+    assert 'href="/admin/analytics"' not in client.get("/").text
+
+    first = client.get("/api/latest?platform=windows&current=0.9.81")
+    assert first.status_code == 404
+    client.get("/api/latest?platform=windows&current=<script>")
+    client.get("/api/latest?platform=ubuntu-22.04&current=0.9.80")
+
+    _sign_in(client)
+    for public in ("/", "/install", "/releases", "/dependencies"):
+        assert 'href="/admin/analytics"' not in client.get(public).text
+    page = client.get("/admin/analytics")
+    assert page.status_code == 200
+    assert 'href="/admin/analytics"' in page.text
+    assert ">Analytics<" in page.text
+    assert 'aria-current="page"' in page.text
+    publish = client.get("/admin")
+    assert 'href="/admin/analytics"' in publish.text
+    assert ">Analytics<" in publish.text
+    assert "testclient" in page.text
+    assert "0.9.80" in page.text
+    assert "ubuntu-22.04" in page.text
+    assert "Last contact" in page.text
+    assert "&lt;script&gt;" not in page.text
+    chosen = client.get("/admin/analytics?ip=testclient")
+    assert chosen.status_code == 200
+    assert "Version check" in chosen.text
+    assert "ubuntu-22.04" in chosen.text
+    assert "Version " in chosen.text
+    assert "Platform " in chosen.text
+    assert "Last contact " in chosen.text
+    assert "This address is not an IP address." in chosen.text
+    posted = client.post(
+        "/api/latest",
+        params={"platform": "windows", "current": "0.9.81"},
+        json={"usage": {"jobs": 17, "merge_requests": 13}},
+    )
+    assert posted.status_code == 405
+
+    body = client.get("/api/admin/installations?ip=testclient").json()
+    assert len(body["installations"]) == 1
+    row = body["installations"][0]
+    assert row["ip"] == "testclient"
+    assert row["hits"] == 3
+    assert row["client_version"] == "0.9.80"
+    assert row["platform"] == "ubuntu-22.04"
+    assert body["selected"]["events"][0]["client_version"] == "0.9.80"
+    assert all("<" not in event["client_version"] for event in body["selected"]["events"])
+    assert "usage" not in row
+
+    fresh = TestClient(client.app)
+    opened = fresh.get("/api/admin/installations", auth=("admin", "correct-horse"))
+    assert opened.status_code == 200
+    assert opened.json()["installations"][0]["ip"] == "testclient"
+    denied = fresh.get("/api/admin/installations", auth=("admin", "wrong"))
+    assert denied.status_code == 403
+    assert "www-authenticate" not in {key.lower() for key in denied.headers}
+    assert body["selected"]["usage"] is None
+    assert body["selected"]["usage_error"] == "This address is not an IP address."
+
+
+class _InstallServer(ThreadingHTTPServer):
+    def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> None:
+        super().__init__(address, handler)
+        self.mode = "ok"
+        self.seen: list[tuple[str, str, str]] = []
+
+
+class _InstallHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self) -> None:
+        server = self.server
+        if not isinstance(server, _InstallServer):
+            self.send_error(500)
+            return
+        server.seen.append((self.command, self.path, self.headers.get("Authorization") or ""))
+        if server.mode == "redirect":
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:8080/api/analytics")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if server.mode == "huge":
+            raw = b'{"jobs":999,"pad":"' + (b"x" * 70000) + b'"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        expected = f"Bearer {INSTALL_ANALYTICS_TOKEN}"
+        presented = self.headers.get("Authorization") or ""
+        if len(presented) != len(expected) or not hmac.compare_digest(presented, expected):
+            raw = b'{"detail":"Forbidden"}'
+            self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        payload = {
+            "jobs": 17,
+            "completed": 9,
+            "error": 4,
+            "cancelled": 2,
+            "plan_ready": 1,
+            "in_flight": 1,
+            "merge_requests": 13,
+            "opened": 3,
+            "merged": 8,
+            "closed": 2,
+            "client_version": "0.0.1",
+            "ours": {"opened": 2, "merged": 6, "closed": 1, "total": 9},
+            "contributed": {"opened": 1, "merged": 2, "closed": 1, "total": 4},
+            "categories": [
+                {
+                    "label": "Build",
+                    "jobs": 11,
+                    "completed": 8,
+                    "error": 2,
+                    "cancelled": 1,
+                    "plan_ready": 0,
+                    "in_flight": 0,
+                }
+            ],
+            "models": [{"label": "opencode/deepseek <script>", "jobs": 17}],
+            "agents": [{"label": "derman-build", "jobs": 11}],
+            "repositories": [{"label": "https://gitlab.example/group/app", "jobs": 11}],
+            "statuses": [{"label": "completed", "jobs": 9}],
+        }
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
+def _remember(client: TestClient, ip: str, *, platform: str = "windows", version: str = "0.9.81") -> None:
+    client.app.state.store.record_install_hit(
+        ip=ip,
+        kind="latest",
+        platform=platform,
+        client_version=version,
+        published_version="0.9.81",
+    )
+
+
+def test_selecting_an_address_gets_that_installs_analytics(tmp_path: Path, monkeypatch):
+    server = _InstallServer(("127.0.0.1", 0), _InstallHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    assert port != 8080
+    monkeypatch.setattr("yaver_releases.install_fetch.INSTALL_ANALYTICS_PORT", port)
+    client = _client(tmp_path)
+    _remember(client, "127.0.0.1")
+    _remember(client, "evil.test")
+    _remember(client, "169.254.169.254")
+    try:
+        assert client.get("/admin/analytics?ip=127.0.0.1", follow_redirects=False).status_code == 303
+        assert server.seen == []
+        _sign_in(client)
+        assert client.get("/admin/analytics").status_code == 200
+        assert server.seen == []
+        missing = client.get("/admin/analytics?ip=10.9.8.7")
+        assert missing.status_code == 200
+        assert "No requests from 10.9.8.7" in missing.text
+        assert server.seen == []
+
+        page = client.get("/admin/analytics?ip=127.0.0.1")
+        assert page.status_code == 200
+        assert len(server.seen) == 1
+        method, path, authorization = server.seen[0]
+        assert method == "GET"
+        assert path == "/api/analytics/install"
+        assert authorization == f"Bearer {INSTALL_ANALYTICS_TOKEN}"
+        assert "Version 0.9.81" in page.text
+        assert "Platform windows" in page.text
+        assert "Last contact " in page.text
+        assert "Version 0.0.1" not in page.text
+        assert ">17<" in page.text
+        assert ">13<" in page.text
+        assert "Opened by us" in page.text
+        assert "Contributed" in page.text
+        assert ">Build<" in page.text
+        assert "derman-build" in page.text
+        assert "gitlab.example/group/app" in page.text
+        assert "opencode/deepseek script" in page.text
+        assert "opencode/deepseek <script>" not in page.text
+        assert INSTALL_ANALYTICS_TOKEN not in page.text
+
+        body = client.get("/api/admin/installations?ip=127.0.0.1").json()
+        assert body["selected"]["usage"]["jobs"] == 17
+        assert body["selected"]["usage"]["merge_requests"] == 13
+        assert body["selected"]["client_version"] == "0.9.81"
+        assert body["selected"]["platform"] == "windows"
+        assert body["selected"]["usage_error"] == ""
+        assert "<" not in body["selected"]["usage"]["models"][0]["label"]
+        assert "usage" not in body["installations"][0]
+        assert INSTALL_ANALYTICS_TOKEN not in json.dumps(body)
+
+        before = len(server.seen)
+        client.get("/admin/analytics?ip=evil.test")
+        client.get("/admin/analytics?ip=169.254.169.254")
+        assert len(server.seen) == before
+
+        server.mode = "redirect"
+        redirected = client.get("/admin/analytics?ip=127.0.0.1")
+        assert "redirected the analytics request" in redirected.text
+        assert ">17<" not in redirected.text
+        assert all(item[1] == "/api/analytics/install" for item in server.seen)
+
+        server.mode = "huge"
+        huge = client.get("/admin/analytics?ip=127.0.0.1")
+        assert "too large" in huge.text
+        assert ">999<" not in huge.text
+    finally:
+        server.shutdown()
+        server.server_close()

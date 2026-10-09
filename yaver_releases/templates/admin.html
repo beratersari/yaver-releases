@@ -3,6 +3,7 @@
 {% block body %}
 <p class="kicker">Admin</p>
 <h1>Publish a release</h1>
+<p><a href="/admin/analytics">Installation analytics</a></p>
 <p class="lede">Upload one zip for Windows and every Ubuntu version. The files inside are named with the version, for example <code>yaver-windows-x64-0.9.79.zip</code> and <code>yaver-linux-x64-ubuntu-22.04-0.9.79.zip</code>. This form does not ask for a version. Colleagues still download each system on its own. A zip that contains only one folder is opened before those names are read. Dependency zips are separate: one tool, with a <code>VERSION</code> file that is that tool's version. update.bat and update.sh do not install those.</p>
 {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}

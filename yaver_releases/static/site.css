@@ -621,6 +621,35 @@ p { margin: 0.35rem 0 0.8rem; }
   font-size: 0.875rem;
 }
 
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 12px;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.7rem 0.8rem;
+}
+
+.stat .num {
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.stat .lbl {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
 .card .button { margin-top: 0; align-self: flex-start; }
 
 .card:not(.card-lead) .meta {
