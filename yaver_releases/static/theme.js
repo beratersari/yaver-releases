@@ -10,8 +10,18 @@
 
   function apply(theme) {
     var dark = theme !== "light";
-    root.setAttribute("data-theme", dark ? "dark" : "light");
-    root.style.colorScheme = dark ? "dark" : "light";
+    var name = dark ? "dark" : "light";
+    var scheme = dark ? "only dark" : "only light";
+    root.setAttribute("data-theme", name);
+    /* setProperty keeps the "only" keyword. The colorScheme property drops it,
+       and Edge then repaints the page with its own night or light colors. */
+    root.style.setProperty("color-scheme", scheme);
+    if (document.body) {
+      document.body.setAttribute("data-theme", name);
+      document.body.style.setProperty("color-scheme", scheme);
+    }
+    var declared = document.querySelector('meta[name="color-scheme"]');
+    if (declared) declared.setAttribute("content", scheme);
     if (paint) paint.setAttribute("content", dark ? "#07090d" : "#f3f6f4");
     if (!button) return;
     button.setAttribute("aria-checked", dark ? "true" : "false");
@@ -61,4 +71,44 @@
 
   openHashedFold();
   window.addEventListener("hashchange", openHashedFold);
+})();
+
+(function () {
+  function fallbackCopy(field) {
+    field.focus();
+    field.select();
+    try {
+      return document.execCommand("copy");
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function show(button, ok) {
+    var previous = button.getAttribute("data-label") || button.textContent;
+    button.setAttribute("data-label", previous);
+    button.textContent = ok ? "Copied" : "Select and copy";
+    window.setTimeout(function () {
+      button.textContent = previous;
+    }, 1600);
+  }
+
+  var buttons = document.querySelectorAll("[data-copy-target]");
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener("click", function () {
+      var button = this;
+      var field = document.getElementById(button.getAttribute("data-copy-target"));
+      if (!field) return;
+      var text = field.value;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function () {
+          show(button, true);
+        }, function () {
+          show(button, fallbackCopy(field));
+        });
+        return;
+      }
+      show(button, fallbackCopy(field));
+    });
+  }
 })();

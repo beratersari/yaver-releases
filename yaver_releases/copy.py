@@ -37,6 +37,79 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("codex_linux", "Codex on Linux", "Dependencies"),
 )
 
+# The file an operator pastes over before install. Same text the CLI zip ships.
+# Destinations are the paths the install command copies that file to.
+CONFIG_DESTINATIONS: dict[str, tuple[str, str]] = {
+    "opencode": (
+        r"%USERPROFILE%\.opencode\opencode.json",
+        "~/.opencode/opencode.json",
+    ),
+    "claude": (
+        r"%USERPROFILE%\.claude\settings.json",
+        "~/.claude/settings.json",
+    ),
+    "codex": (
+        r"%USERPROFILE%\.codex\config.toml",
+        "~/.codex/config.toml",
+    ),
+}
+
+SAMPLE_CONFIGS: dict[str, tuple[str, str]] = {
+    "opencode": (
+        "opencode.json",
+        """{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "plugin": [],
+  "model": "custom/YOUR_MODEL",
+  "provider": {
+    "custom": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Custom host",
+      "options": {
+        "baseURL": "https://YOUR_HOST/v1",
+        "apiKey": "YOUR_TOKEN"
+      },
+      "models": {
+        "YOUR_MODEL": {
+          "name": "YOUR_MODEL"
+        }
+      }
+    }
+  }
+}
+""",
+    ),
+    "claude": (
+        "settings.json",
+        """{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://YOUR_HOST",
+    "ANTHROPIC_AUTH_TOKEN": "YOUR_TOKEN"
+  }
+}
+""",
+    ),
+    "codex": (
+        "config.toml",
+        """# Edit YOUR_HOST and YOUR_MODEL, then run install-codex.bat again.
+# The token is read from the CUSTOM_HOST_TOKEN environment variable.
+
+model = "YOUR_MODEL"
+model_provider = "custom"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[model_providers.custom]
+name = "Custom host"
+base_url = "https://YOUR_HOST/v1"
+wire_api = "responses"
+env_key = "CUSTOM_HOST_TOKEN"
+""",
+    ),
+}
+
+
 TOKEN_HELP: tuple[tuple[str, str], ...] = (
     ("{base}", "this site, such as http://192.168.1.20:8090"),
     ("{windows}", "Windows zip"),
@@ -149,7 +222,7 @@ chmod 755 update.sh
         "copies the agents. The Linux commands use `unzip` and `nano`. If "
         "either is missing, run `sudo apt-get install -y unzip nano` once."
     ),
-    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The install command copies the CLI to `%USERPROFILE%\.opencode\bin` and adds that folder to your user PATH. Open a new terminal afterward.
+    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The install command copies `opencode.json` to `%USERPROFILE%\.opencode\opencode.json`, copies the CLI to `%USERPROFILE%\.opencode\bin`, and adds that folder to your user PATH. Open a new terminal afterward.
 
 PowerShell:
 
@@ -162,7 +235,7 @@ notepad opencode\opencode.json
 .\install-opencode.bat
 ```
 """,
-    "opencode_linux": r"""The zip contains `install-opencode.sh`, the `opencode` binary, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The script copies the CLI to `~/.opencode/bin` when OpenCode is not already on PATH.
+    "opencode_linux": r"""The zip contains `install-opencode.sh`, the `opencode` binary, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The script copies `opencode.json` to `~/.opencode/opencode.json` and copies the CLI to `~/.opencode/bin` when OpenCode is not already on PATH.
 
 ```
 mkdir -p "$HOME/opencode"
@@ -174,7 +247,7 @@ nano opencode/opencode.json
 ./install-opencode.sh
 ```
 """,
-    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The install command copies the CLI to `%USERPROFILE%\.local\bin` and the config to `%USERPROFILE%\.claude\settings.json`. Open a new terminal afterward.
+    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json` and the CLI to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
 
 PowerShell:
 
@@ -187,7 +260,7 @@ notepad claude\settings.json
 .\install-claude.bat
 ```
 """,
-    "claude_linux": r"""The zip contains `install-claude.sh`, the `claude` binary, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The script copies the CLI next to an existing `claude` on PATH, or into `~/.local/bin` on a first install.
+    "claude_linux": r"""The zip contains `install-claude.sh`, the `claude` binary, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The script copies `settings.json` to `~/.claude/settings.json` and copies the CLI next to an existing `claude` on PATH, or into `~/.local/bin` on a first install.
 
 ```
 mkdir -p "$HOME/claude"
@@ -199,7 +272,7 @@ nano claude/settings.json
 ./install-claude.sh
 ```
 """,
-    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The install command copies the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` and the config to `%USERPROFILE%\.codex\config.toml`. Open a new terminal afterward.
+    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The install command copies `config.toml` to `%USERPROFILE%\.codex\config.toml` and the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. Open a new terminal afterward.
 
 PowerShell:
 
@@ -212,7 +285,7 @@ notepad codex\config.toml
 .\install-codex.bat
 ```
 """,
-    "codex_linux": r"""The zip contains `install-codex.sh`, the `codex` binary, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The script copies the CLI next to an existing `codex` on PATH, or into `~/.local/bin` on a first install.
+    "codex_linux": r"""The zip contains `install-codex.sh`, the `codex` binary, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The script copies `config.toml` to `~/.codex/config.toml` and copies the CLI next to an existing `codex` on PATH, or into `~/.local/bin` on a first install.
 
 ```
 mkdir -p "$HOME/codex"
@@ -380,3 +453,34 @@ def _href_ok(url: str) -> bool:
         return False
     rest = url.split("://", 1)[1]
     return bool(rest) and not rest.startswith("/") and "<" not in url and '"' not in url and ">" not in url
+
+
+_BARE_URL = re.compile(r"https?://[^\s<>\"'`\\]+", re.IGNORECASE)
+
+
+def certificate_url(text: str) -> str:
+    """First external certificate address in the dependencies description.
+
+    A markdown link wins over a bare address. Same-site paths and anything
+    that would break the install command are left out.
+    """
+
+    raw = text or ""
+    for match in _INLINE.finditer(raw):
+        url = match.group(3)
+        if url and _external_http_url(url):
+            return url
+    for match in _BARE_URL.finditer(_INLINE.sub(" ", raw)):
+        url = match.group(0).rstrip(").,")
+        if _external_http_url(url):
+            return url
+    return ""
+
+
+def _external_http_url(url: str) -> bool:
+    lowered = url.lower()
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        return False
+    if not _href_ok(url):
+        return False
+    return not any(char in url for char in " \t\r\n'`\\")

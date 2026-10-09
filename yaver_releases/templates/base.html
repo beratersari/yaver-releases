@@ -1,23 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" style="color-scheme: only dark">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <meta name="theme-color" content="#07090d">
+  <meta name="color-scheme" content="only dark">
   <title>{% block title %}Yaver releases{% endblock %}</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/site.css">
   <script>
     (function () {
       var theme = "dark";
       try {
         if (localStorage.getItem("yaver.theme") === "light") theme = "light";
       } catch (err) {}
-      document.documentElement.setAttribute("data-theme", theme);
-      document.documentElement.style.colorScheme = theme;
+      var root = document.documentElement;
+      root.setAttribute("data-theme", theme);
+      var scheme = theme === "light" ? "only light" : "only dark";
+      root.style.setProperty("color-scheme", scheme);
+      var meta = document.querySelector('meta[name="color-scheme"]');
+      if (meta) meta.setAttribute("content", scheme);
+      var paint = document.querySelector('meta[name="theme-color"]');
+      if (paint) paint.setAttribute("content", theme === "light" ? "#f3f6f4" : "#07090d");
     })();
   </script>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/site.css">
 </head>
 <body>
   {% set path = request.url.path %}

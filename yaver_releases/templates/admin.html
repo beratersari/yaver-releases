@@ -109,7 +109,7 @@
 </div>
 
 <h2 id="page-text">Page text</h2>
-<p id="copy-hint" class="quiet">This is the wording on the install page, Release history, and the Dependencies page. A line that is only ``` starts a command block. `backticks` mark a short command. [label](/path) makes a link. These tokens are filled from the address the visitor used to open the page:</p>
+<p id="copy-hint" class="quiet">This is the wording on the install page, Release history, and the Dependencies page. A line that is only ``` starts a command block. `backticks` mark a short command. [label](https://example/cert.crt) makes a link. The first external link in Dependencies introduction is the network certificate. These tokens are filled from the address the visitor used to open the page:</p>
 <p class="quiet">{% for name, detail in token_help %}<code>{{ name }}</code> {{ detail }}{% if not loop.last %}. {% endif %}{% endfor %}.</p>
 
 <form class="panel" method="post" action="/admin/copy">

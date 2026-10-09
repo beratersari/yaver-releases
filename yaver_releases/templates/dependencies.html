@@ -1,4 +1,16 @@
-<div class="lede-block">
+<section class="need" id="network-certificate" aria-labelledby="network-certificate-title">
+  <p class="need-kicker">Before anything else</p>
+  <h2 class="need-title" id="network-certificate-title">Set NODE_EXTRA_CA_CERTS as a system variable.</h2>
+  <p class="need-copy">Node reads <code>NODE_EXTRA_CA_CERTS</code> to trust the network certificate. Set that system variable on the whole machine before OpenCode, Claude Code, or Codex. The certificate address is the external link in the description below. Close every terminal and open a new one. On Linux, sign out and sign in so the system environment loads.</p>
+  <h3>Windows</h3>
+  <p><a href="{{ cert_url or '#deps-intro' }}">Download it</a> and put it in <code>C:\certs\network-ca.crt</code>. Run PowerShell as administrator. This command sets the system variable.</p>
+  <pre>[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "C:\certs\network-ca.crt", "Machine")</pre>
+  <h3>Linux</h3>
+  <p><a href="{{ cert_url or '#deps-intro' }}">Download it</a> and put it in <code>~/certs/network-ca.crt</code>. This command adds the system variable to <code>/etc/environment</code>.</p>
+  <pre>grep -q '^NODE_EXTRA_CA_CERTS=' /etc/environment || echo "NODE_EXTRA_CA_CERTS=$HOME/certs/network-ca.crt" | sudo tee -a /etc/environment >/dev/null</pre>
+</section>
+
+<div class="lede-block" id="deps-intro">
   {{ sections.deps_intro }}
 </div>
 
@@ -8,16 +20,56 @@
     <summary><h2>{{ item.label }}</h2></summary>
     <div class="fold-body">
       <h3>Windows</h3>
-      {% if item.windows_row.version %}
-      <p class="tool-download"><a class="button" href="{{ item.windows_row.download_path }}">Download {{ item.windows_row.version }}</a>{% if item.windows_row.layout %} <span class="tag">{{ item.windows_row.layout|layout_label }}</span>{% endif %}</p>
-      {% endif %}
       {{ sections[item.windows_copy] }}
       <h3>Linux</h3>
-      {% if item.linux_row.version %}
-      <p class="tool-download"><a class="button" href="{{ item.linux_row.download_path }}">Download {{ item.linux_row.version }}</a>{% if item.linux_row.layout %} <span class="tag">{{ item.linux_row.layout|layout_label }}</span>{% endif %}</p>
-      {% endif %}
       {{ sections[item.linux_copy] }}
+      {% if item.id == "opencode" %}
+      <p class="warn" role="note"><strong>Warning</strong>: Remove anything that already exists under the user's <code>.config/opencode</code> path. Config and agent files are kept in that folder. On Windows the path is <code>%USERPROFILE%\.config\opencode</code>. On Linux the path is <code>~/.config/opencode</code>.</p>
+      {% endif %}
+      <div class="sample">
+        <div class="sample-bar">
+          <label for="sample-{{ item.id }}">Sample config <span class="sample-file">{{ item.sample_name }}</span><span class="sample-dest"><span class="sample-os">Windows</span> <code>{{ item.windows_config }}</code></span><span class="sample-dest"><span class="sample-os">Linux</span> <code>{{ item.linux_config }}</code></span></label>
+          <button type="button" class="secondary sample-copy" data-copy-target="sample-{{ item.id }}">Copy</button>
+        </div>
+        <textarea id="sample-{{ item.id }}" class="sample-config" readonly spellcheck="false" rows="{{ item.sample_rows }}">{{ item.sample }}</textarea>
+      </div>
     </div>
   </details>
   {% endfor %}
 </div>
+
+<section class="artifacts" id="artifacts" aria-labelledby="artifacts-title">
+  <h2 id="artifacts-title">Artifacts</h2>
+  {% set published = namespace(found=false) %}
+  {% for item in dependencies %}
+    {% if item.windows_row.version or item.linux_row.version %}
+      {% set published.found = true %}
+    {% endif %}
+  {% endfor %}
+  {% if not published.found %}
+  <p class="quiet">No package has been published yet.</p>
+  {% else %}
+  <ul class="history-list">
+    {% for item in dependencies %}
+    {% if item.windows_row.version %}
+    <li>
+      <span>
+        <span class="history-label">{{ item.label }} for Windows</span>
+        {% if item.windows_row.layout %}<span class="tag">{{ item.windows_row.layout|layout_label }}</span>{% endif %}
+      </span>
+      <a class="button" href="{{ item.windows_row.download_path }}">Download {{ item.windows_row.version }}</a>
+    </li>
+    {% endif %}
+    {% if item.linux_row.version %}
+    <li>
+      <span>
+        <span class="history-label">{{ item.label }} for Linux</span>
+        {% if item.linux_row.layout %}<span class="tag">{{ item.linux_row.layout|layout_label }}</span>{% endif %}
+      </span>
+      <a class="button" href="{{ item.linux_row.download_path }}">Download {{ item.linux_row.version }}</a>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

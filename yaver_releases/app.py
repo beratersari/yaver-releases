@@ -30,9 +30,13 @@ from yaver_releases.auth import (
     sign_session,
 )
 from yaver_releases.copy import (
+    CONFIG_DESTINATIONS,
+    DEFAULTS,
+    SAMPLE_CONFIGS,
     SECTIONS,
     TOKEN_HELP,
     CopyError,
+    certificate_url,
     clean_body,
     public_html,
     render_copy,
@@ -144,6 +148,7 @@ def create_app(
     async def _headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-UA-Compatible"] = "IE=edge"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
@@ -704,6 +709,8 @@ def _dependency_groups(rows: list[dict]) -> list[dict]:
     )
     groups: list[dict] = []
     for tool, label, windows_copy, linux_copy in specs:
+        sample_name, sample = SAMPLE_CONFIGS[tool]
+        windows_config, linux_config = CONFIG_DESTINATIONS[tool]
         groups.append(
             {
                 "id": tool,
@@ -712,6 +719,11 @@ def _dependency_groups(rows: list[dict]) -> list[dict]:
                 "linux_copy": linux_copy,
                 "windows_row": by_platform.get(f"{tool}-windows", {}),
                 "linux_row": by_platform.get(f"{tool}-linux", {}),
+                "sample_name": sample_name,
+                "windows_config": windows_config,
+                "linux_config": linux_config,
+                "sample": sample,
+                "sample_rows": max(sample.count("\n"), 1),
             }
         )
     return groups
@@ -719,11 +731,14 @@ def _dependency_groups(rows: list[dict]) -> list[dict]:
 
 def _public_context(request: Request, store: ReleaseStore) -> dict:
     dependency_rows = store.list_dependencies()
+    stored = store.copy_map()
+    intro = stored["deps_intro"] if "deps_intro" in stored else DEFAULTS["deps_intro"]
     return {
         "releases": store.list_all(),
         "dependency_rows": dependency_rows,
         "dependencies": _dependency_groups(dependency_rows),
         "sections": _public_sections(request, store),
+        "cert_url": certificate_url(intro),
     }
 
 

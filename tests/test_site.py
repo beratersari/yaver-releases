@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import hmac
 import io
 import json
@@ -148,8 +149,12 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "/download/opencode-windows" not in home.text
     assert "Windows package is not published yet." not in home.text
     assert "Windows package is not published yet." not in install.text
-    assert tools.text.count("<h3>Windows</h3>") == 3
-    assert tools.text.count("<h3>Linux</h3>") == 3
+    assert tools.text.count("<h3>Windows</h3>") == 4
+    assert tools.text.count("<h3>Linux</h3>") == 4
+    assert tools.text.index('id="codex"') < tools.text.index('id="artifacts"')
+    assert ">Artifacts</h2>" in tools.text
+    assert "No package has been published yet." in tools.text
+    assert '<a class="button"' not in tools.text
     assert install.text.count("<h3>Install</h3>") == 5
     assert install.text.count("<h3>Update</h3>") == 5
     assert install.text.count("setsid nohup ./yaver start") == 4
@@ -328,6 +333,12 @@ def test_a_cli_zip_is_a_dependency_and_not_a_yaver_update(tmp_path: Path):
     assert "Command-line tool" in tools.text
     assert 'href="/download/opencode-windows"' in tools.text
     assert ".\\install-opencode.bat" in tools.text
+    fold = tools.text[tools.text.index('id="opencode"'):tools.text.index('id="artifacts"')]
+    assert 'href="/download/opencode-windows"' not in fold
+    artifacts = tools.text[tools.text.index('id="artifacts"'):]
+    assert ">Artifacts</h2>" in artifacts
+    assert artifacts.index(">Artifacts</h2>") < artifacts.index('href="/download/opencode-windows"')
+    assert "Download 1.18.10" in artifacts
     install = client.get("/install")
     assert ".\\install-opencode.bat" not in install.text
     assert "1.18.10" not in install.text
@@ -1388,3 +1399,197 @@ def test_selecting_an_address_gets_that_installs_analytics(tmp_path: Path, monke
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
+    client = _client(tmp_path)
+    page = client.get("/dependencies")
+    assert page.status_code == 200
+    text = page.text
+    head = text[:text.index('id="opencode"')]
+    assert "Before anything else" in head
+    assert "NODE_EXTRA_CA_CERTS" in head
+    assert "system variable" in head
+    assert "external link in the description" in head
+    assert 'href="/static/network-ca.crt"' not in text
+    assert "/static/network-ca.crt" not in text
+    assert 'class="button"' not in head
+    assert head.count('<a href="#deps-intro">Download it</a>') == 2
+    windows_h = head.index("<h3>Windows</h3>")
+    linux_h = head.index("<h3>Linux</h3>")
+    first_link = head.index('<a href="#deps-intro">Download it</a>')
+    assert windows_h < first_link < linux_h
+    assert "C:\\certs\\network-ca.crt" in head
+    assert "~/certs/network-ca.crt" in head
+    assert "NODE_EXTRA_CA_CERTS=$HOME/certs/network-ca.crt" in head
+    assert "NODE_EXTRA_CA_CERTS=/certs/network-ca.crt" not in head
+    assert "New-Item -ItemType Directory -Force -Path C:\\certs" not in head
+    assert "mkdir -p /certs" not in head
+    assert '"Machine"' in head
+    assert "/etc/environment" in head
+    assert head.index("<h3>Windows</h3>") < head.index("<h3>Linux</h3>")
+    assert head.index("NODE_EXTRA_CA_CERTS") < head.index("<h3>Windows</h3>")
+    assert "NODE_EXTRA_CA_CERTS" not in client.get("/install").text
+    assert "PRIVATE KEY" not in head
+
+
+def test_certificate_address_is_the_external_link_in_the_description(tmp_path: Path):
+    from yaver_releases.copy import DEFAULTS, certificate_url
+
+    assert certificate_url("see [cert](https://certs.example/a.crt) later") == "https://certs.example/a.crt"
+    assert certificate_url("plain https://certs.example/plain.crt end") == "https://certs.example/plain.crt"
+    assert certificate_url("[x](javascript:alert(1))") == ""
+    assert certificate_url('[x](https://certs.example/a"b)') == ""
+    assert certificate_url("[local](/static/network-ca.crt)") == ""
+
+    client = _client(tmp_path)
+    _sign_in(client)
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    intro = DEFAULTS["deps_intro"] + " [Download certificate](https://certs.example/network-ca.crt)"
+    saved = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token, "deps_intro": intro},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    page = client.get("/dependencies")
+    text = page.text
+    head = text[:text.index('id="opencode"')]
+    assert head.count('href="https://certs.example/network-ca.crt"') == 3
+    assert head.count("https://certs.example/network-ca.crt") == 3
+    assert 'class="button"' not in head
+    assert "/static/network-ca.crt" not in text
+    assert "New-Item -ItemType Directory -Force -Path C:\\certs" not in head
+    assert "mkdir -p /certs" not in head
+    assert "curl.exe -fL -o C:\\certs\\network-ca.crt" not in head
+    assert "sudo curl -fL -o /certs/network-ca.crt" not in head
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    rejected = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token, "deps_intro": "Only [bad](javascript:alert(1))."},
+        follow_redirects=False,
+    )
+    assert rejected.status_code == 303
+    again = client.get("/dependencies").text
+    cert = again[:again.index('id="opencode"')]
+    assert 'href="javascript:' not in cert
+    assert cert.count('<a href="#deps-intro">Download it</a>') == 2
+    assert 'class="button"' not in cert
+    assert "curl.exe -fL" not in cert
+
+
+def test_opencode_warns_to_clear_the_config_folder(tmp_path: Path):
+    client = _client(tmp_path)
+    page = client.get("/dependencies")
+    text = page.text
+    opencode = text[text.index('id="opencode"'):text.index('id="claude"')]
+    claude = text[text.index('id="claude"'):text.index('id="codex"')]
+    assert "<strong>Warning</strong>:" in opencode
+    assert "Remove anything that already exists under the user's" in opencode
+    assert ".config/opencode" in opencode
+    assert "%USERPROFILE%\\.config\\opencode" in opencode
+    assert "~/.config/opencode" in opencode
+    assert "Config and agent files are kept in that folder." in opencode
+    assert opencode.index("./install-opencode.sh") < opencode.index("<strong>Warning</strong>:")
+    assert opencode.index("<strong>Warning</strong>:") < opencode.index("sample-config")
+    assert "<strong>Warning</strong>:" not in claude
+    assert "<strong>Warning</strong>:" not in text[text.index('id="codex"'):]
+    assert client.get("/install").text.count("<strong>Warning</strong>:") == 5
+
+
+def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):
+    client = _client(tmp_path)
+    page = client.get("/dependencies")
+    assert page.status_code == 200
+    text = page.text
+    assert text.count('class="sample-config"') == 3
+    assert text.count('data-copy-target="sample-') == 3
+    for tool, filename, windows_dest, linux_dest, marker in (
+        (
+            "opencode",
+            "opencode.json",
+            r"%USERPROFILE%\.opencode\opencode.json",
+            "~/.opencode/opencode.json",
+            '"baseURL": "https://YOUR_HOST/v1"',
+        ),
+        (
+            "claude",
+            "settings.json",
+            r"%USERPROFILE%\.claude\settings.json",
+            "~/.claude/settings.json",
+            '"ANTHROPIC_BASE_URL": "https://YOUR_HOST"',
+        ),
+        (
+            "codex",
+            "config.toml",
+            r"%USERPROFILE%\.codex\config.toml",
+            "~/.codex/config.toml",
+            'base_url = "https://YOUR_HOST/v1"',
+        ),
+    ):
+        assert f'id="sample-{tool}"' in text
+        assert f'for="sample-{tool}"' in text
+        assert f'data-copy-target="sample-{tool}"' in text
+        start = text.index(f'id="{tool}"')
+        fold = text[start:text.index("</details>", start)]
+        assert filename in fold
+        windows = fold[:fold.index("<h3>Linux</h3>")]
+        linux = fold[fold.index("<h3>Linux</h3>"):fold.index(f'for="sample-{tool}"')]
+        label = fold[fold.index(f'for="sample-{tool}"'):fold.index("sample-config")]
+        assert f"<code>{filename}</code> to <code>{windows_dest}</code>" in windows
+        assert f"<code>{filename}</code> to <code>{linux_dest}</code>" in linux
+        assert windows_dest in label
+        assert linux_dest in label
+        assert fold.index(f"./install-{tool}.sh") < fold.index("sample-config")
+        assert fold.index("<h3>Linux</h3>") < fold.index("sample-config")
+        assert marker in html_lib.unescape(fold)
+    assert "YOUR_TOKEN" in text
+    assert "YOUR_MODEL" in text
+    assert "CUSTOM_HOST_TOKEN" in text
+    assert 'class="sample-config"' not in client.get("/install").text
+    script = client.get("/static/theme.js")
+    assert script.status_code == 200
+    assert "data-copy-target" in script.text
+    assert "execCommand" in script.text
+    assert "innerHTML" not in script.text
+
+
+def test_edge_keeps_the_night_and_light_switch(tmp_path: Path):
+    """Edge drops the "only" keyword from the colorScheme property and then
+    repaints the page with its own colors. The served page has to opt out
+    before the stylesheet, and the click handler has to keep that keyword.
+    """
+    client = _client(tmp_path)
+    page = client.get("/install")
+    assert page.status_code == 200
+    assert page.headers["x-ua-compatible"] == "IE=edge"
+    html = page.text
+    assert 'data-theme="dark"' in html
+    assert 'style="color-scheme: only dark"' in html
+    assert '<meta name="color-scheme" content="only dark">' in html
+    assert 'root.style.setProperty("color-scheme", scheme)' in html
+    assert "only light" in html
+    assert ".colorScheme" not in html
+    assert html.index('name="color-scheme"') < html.index('href="/static/site.css"')
+    assert html.index('setProperty("color-scheme"') < html.index('href="/static/site.css"')
+    assert html.index('http-equiv="X-UA-Compatible"') < html.index("<title>")
+
+    css = client.get("/static/site.css")
+    assert css.status_code == 200
+    assert css.headers["x-ua-compatible"] == "IE=edge"
+    assert "color-scheme: only dark" in css.text
+    assert "color-scheme: only light" in css.text
+    assert "background-attachment" not in css.text
+    assert "body::before" in css.text
+    assert "html[data-theme=\"light\"] body" in css.text
+
+    script = client.get("/static/theme.js")
+    assert script.status_code == 200
+    assert 'root.style.setProperty("color-scheme", scheme)' in script.text
+    assert "only light" in script.text
+    assert "only dark" in script.text
+    assert ".colorScheme" not in script.text
+    assert 'localStorage.setItem(key, next)' in script.text
