@@ -843,6 +843,38 @@ def test_home_lists_each_ubuntu_download(tmp_path: Path):
     assert "http://testserver/download/ubuntu-22.04" in install.text
 
 
+def test_release_page_artifacts_start_collapsed(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    published = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(
+                    extra={"RELEASE_NOTES.txt": b"# Yaver 0.9.79\n\nOffice note.\n"}
+                ),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    page = client.get("/releases").text
+    marker = 'id="artifacts-0.9.79"'
+    assert marker in page
+    open_at = page.rfind("<details", 0, page.index(marker))
+    open_tag = page[open_at:page.index(">", open_at) + 1]
+    assert " open" not in open_tag
+    note_at = page.index("Office note.")
+    summary_at = page.index(">Artifacts</h3>")
+    download_at = page.index('href="/download/windows/0.9.79"')
+    assert note_at < summary_at < download_at
+    assert download_at < page.index("</details>", summary_at)
+
+
 def test_bundle_upload_reads_the_version_from_the_zip_names(tmp_path: Path):
     client = _client(tmp_path)
     _sign_in(client)

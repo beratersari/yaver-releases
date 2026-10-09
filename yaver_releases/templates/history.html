@@ -16,18 +16,25 @@
       {% if group.notes %}
       <div class="release-note">{{ group.notes|release_note }}</div>
       {% endif %}
-      <ul class="history-list">
-        {% for row in group.packages %}
-        <li>
-          <span>
-            <span class="history-label">{{ row.label }}</span>
-            <span class="quiet">{{ row.filename }} · {{ row.size|size }}</span>
-            {% if row.notes and row.notes != group.notes %}<span class="notes">{{ row.notes }}</span>{% endif %}
-          </span>
-          <a class="button" href="{{ row.download_path }}">Download</a>
-        </li>
-        {% endfor %}
-      </ul>
+      {% if group.packages %}
+      <details class="fold artifacts" id="artifacts-{{ group.version }}">
+        <summary><h3>Artifacts</h3></summary>
+        <div class="fold-body">
+          <ul class="history-list">
+            {% for row in group.packages %}
+            <li>
+              <span>
+                <span class="history-label">{{ row.label }}</span>
+                <span class="quiet">{{ row.filename }} · {{ row.size|size }}</span>
+                {% if row.notes and row.notes != group.notes %}<span class="notes">{{ row.notes }}</span>{% endif %}
+              </span>
+              <a class="button" href="{{ row.download_path }}">Download</a>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </details>
+      {% endif %}
     </div>
   </details>
   {% endfor %}

@@ -429,7 +429,8 @@ p { margin: 0.35rem 0 0.8rem; }
 
 .fold[open] > summary::before { content: "\2212"; }
 
-.fold > summary h2 {
+.fold > summary h2,
+.fold > summary h3 {
   margin: 0;
   font-size: 1.05rem;
 }
@@ -491,7 +492,13 @@ p { margin: 0.35rem 0 0.8rem; }
 
 .artifacts { margin-top: 1.75rem; }
 
+.fold-body > .artifacts { margin-top: 0.85rem; }
+
 .artifacts .history-list { margin-top: 0.85rem; }
+
+.fold.artifacts .history-list { margin-top: 0; }
+
+.fold.artifacts .history-list li:first-child { border-top: 0; }
 
 .artifacts .button { margin-top: 0; }
 
