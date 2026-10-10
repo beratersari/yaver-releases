@@ -1,7 +1,13 @@
 <section class="need" id="network-certificate" aria-labelledby="network-certificate-title">
   <p class="need-kicker">Before anything else</p>
-  <h2 class="need-title" id="network-certificate-title">Set NODE_EXTRA_CA_CERTS as a system variable.</h2>
-  <p class="need-copy">Node reads <code>NODE_EXTRA_CA_CERTS</code> to trust the network certificate. Set that system variable on the whole machine before OpenCode, Claude Code, or Codex. The certificate address is the external link in the description below. Close every terminal and open a new one. On Linux, sign out and sign in so the system environment loads.</p>
+  <h2 class="need-title" id="network-certificate-title">Set AI_API_KEY and the network certificate.</h2>
+  <p class="need-copy">OpenCode and Codex read <code>AI_API_KEY</code>. Yaver passes that same variable to Claude. Node reads <code>NODE_EXTRA_CA_CERTS</code> to trust the network certificate. Set both system variables on the whole machine before those tools. The certificate address is the external link in the description below. Close every terminal and open a new one, then start Yaver again. On Linux, sign out and sign in so the system environment loads.</p>
+  <h3>API key</h3>
+  <p>Replace <code>YOUR_TOKEN</code> with the key. OpenCode and Codex read this system variable. Yaver passes it to Claude. Do not paste the key into their config files.</p>
+  <p>Windows. Run PowerShell as administrator. This command sets the system variable.</p>
+  <pre>[Environment]::SetEnvironmentVariable("AI_API_KEY", "YOUR_TOKEN", "Machine")</pre>
+  <p>Linux. This command sets the system variable in <code>/etc/environment</code>.</p>
+  <pre>sudo sed -i '/^AI_API_KEY=/d' /etc/environment &amp;&amp; echo 'AI_API_KEY=YOUR_TOKEN' | sudo tee -a /etc/environment >/dev/null</pre>
   <h3>Windows</h3>
   <p><a href="{{ cert_url or '#deps-intro' }}">Download it</a> and put it in <code>C:\certs\network-ca.crt</code>. Run PowerShell as administrator. This command sets the system variable.</p>
   <pre>[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "C:\certs\network-ca.crt", "Machine")</pre>

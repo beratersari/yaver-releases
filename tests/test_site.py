@@ -1477,7 +1477,16 @@ def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     assert "/etc/environment" in head
     assert head.index("<h3>Windows</h3>") < head.index("<h3>Linux</h3>")
     assert head.index("NODE_EXTRA_CA_CERTS") < head.index("<h3>Windows</h3>")
+    assert "Set AI_API_KEY and the network certificate." in head
+    assert "Yaver passes that same variable to Claude" in head
+    assert "apiKeyHelper" not in head
+    assert "Set NODE_EXTRA_CA_CERTS as a system variable." not in head
+    assert head.index("<h3>API key</h3>") < head.index("<h3>Windows</h3>")
+    assert 'SetEnvironmentVariable("AI_API_KEY", "YOUR_TOKEN", "Machine")' in head
+    assert "AI_API_KEY=YOUR_TOKEN" in head
+    assert "sed -i '/^AI_API_KEY=/d'" in head
     assert "NODE_EXTRA_CA_CERTS" not in client.get("/install").text
+    assert "AI_API_KEY" not in client.get("/install").text
     assert "PRIVATE KEY" not in head
 
 
@@ -1596,7 +1605,24 @@ def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):
         assert marker in html_lib.unescape(fold)
     assert "YOUR_TOKEN" in text
     assert "YOUR_MODEL" in text
-    assert "CUSTOM_HOST_TOKEN" in text
+    assert "CUSTOM_HOST_TOKEN" not in text
+    plain = html_lib.unescape(text)
+    def _sample(tool: str) -> str:
+        start = plain.index(f'id="sample-{tool}"')
+        return plain[start:plain.index("</textarea>", start)]
+
+    opencode_sample = _sample("opencode")
+    claude_sample = _sample("claude")
+    codex_sample = _sample("codex")
+    assert '"apiKey": "{env:AI_API_KEY}"' in opencode_sample
+    assert "YOUR_TOKEN" not in opencode_sample
+    assert "apiKeyHelper" not in claude_sample
+    assert "AI_API_KEY" not in claude_sample
+    assert "ANTHROPIC_AUTH_TOKEN" not in claude_sample
+    assert "YOUR_TOKEN" not in claude_sample
+    assert "Yaver passes" in plain[plain.index('id="claude"'):plain.index('id="codex"')]
+    assert 'env_key = "AI_API_KEY"' in codex_sample
+    assert "apiKeyHelper" not in plain
     assert 'class="sample-config"' not in client.get("/install").text
     script = client.get("/static/theme.js")
     assert script.status_code == 200

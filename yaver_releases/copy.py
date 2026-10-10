@@ -68,7 +68,7 @@ SAMPLE_CONFIGS: dict[str, tuple[str, str]] = {
       "name": "Custom host",
       "options": {
         "baseURL": "https://YOUR_HOST/v1",
-        "apiKey": "YOUR_TOKEN"
+        "apiKey": "{env:AI_API_KEY}"
       },
       "models": {
         "YOUR_MODEL": {
@@ -84,8 +84,7 @@ SAMPLE_CONFIGS: dict[str, tuple[str, str]] = {
         "settings.json",
         """{
   "env": {
-    "ANTHROPIC_BASE_URL": "https://YOUR_HOST",
-    "ANTHROPIC_AUTH_TOKEN": "YOUR_TOKEN"
+    "ANTHROPIC_BASE_URL": "https://YOUR_HOST"
   }
 }
 """,
@@ -93,7 +92,7 @@ SAMPLE_CONFIGS: dict[str, tuple[str, str]] = {
     "codex": (
         "config.toml",
         """# Edit YOUR_HOST and YOUR_MODEL, then run install-codex.bat again.
-# The token is read from the CUSTOM_HOST_TOKEN environment variable.
+# The token is read from the AI_API_KEY environment variable.
 
 model = "YOUR_MODEL"
 model_provider = "custom"
@@ -104,7 +103,7 @@ sandbox_mode = "danger-full-access"
 name = "Custom host"
 base_url = "https://YOUR_HOST/v1"
 wire_api = "responses"
-env_key = "CUSTOM_HOST_TOKEN"
+env_key = "AI_API_KEY"
 """,
     ),
 }
@@ -215,14 +214,16 @@ chmod 755 update.sh
 """,
     "deps_intro": (
         "OpenCode, Claude Code, and Codex are not inside the Yaver executable. "
-        "Each tool is its own zip. Windows and Linux are separate files. Edit "
-        "`YOUR_HOST` in that tool's config, then run its install command. "
+        "Each tool is its own zip. Windows and Linux are separate files. "
+        "Set `AI_API_KEY` in the step above. Edit `YOUR_HOST` and "
+        "`YOUR_MODEL` where that tool's config has them, then run its "
+        "install command. "
         "These zips do not include agents. After Yaver is installed, "
         "`install-agents.bat` or `install-agents.sh` from the Yaver package "
         "copies the agents. The Linux commands use `unzip` and `nano`. If "
         "either is missing, run `sudo apt-get install -y unzip nano` once."
     ),
-    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The install command copies `opencode.json` to `%USERPROFILE%\.opencode\opencode.json`, copies the CLI to `%USERPROFILE%\.opencode\bin`, and adds that folder to your user PATH. Open a new terminal afterward.
+    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST` and `YOUR_MODEL` in `opencode.json`. The key is read from `AI_API_KEY`. Then run the commands. The install command copies `opencode.json` to `%USERPROFILE%\.opencode\opencode.json`, copies the CLI to `%USERPROFILE%\.opencode\bin`, and adds that folder to your user PATH. Open a new terminal afterward.
 
 PowerShell:
 
@@ -235,7 +236,7 @@ notepad opencode\opencode.json
 .\install-opencode.bat
 ```
 """,
-    "opencode_linux": r"""The zip contains `install-opencode.sh`, the `opencode` binary, and `opencode.json`. Set `YOUR_HOST`, `YOUR_TOKEN`, and `YOUR_MODEL` in `opencode.json`, then run the commands. The script copies `opencode.json` to `~/.opencode/opencode.json` and copies the CLI to `~/.opencode/bin` when OpenCode is not already on PATH.
+    "opencode_linux": r"""The zip contains `install-opencode.sh`, the `opencode` binary, and `opencode.json`. Set `YOUR_HOST` and `YOUR_MODEL` in `opencode.json`. The key is read from `AI_API_KEY`. Then run the commands. The script copies `opencode.json` to `~/.opencode/opencode.json` and copies the CLI to `~/.opencode/bin` when OpenCode is not already on PATH.
 
 ```
 mkdir -p "$HOME/opencode"
@@ -247,7 +248,7 @@ nano opencode/opencode.json
 ./install-opencode.sh
 ```
 """,
-    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json` and the CLI to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
+    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` in `settings.json`. Yaver passes `AI_API_KEY` to Claude. Do not paste the key into `settings.json`. Then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json` and the CLI to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
 
 PowerShell:
 
@@ -260,7 +261,7 @@ notepad claude\settings.json
 .\install-claude.bat
 ```
 """,
-    "claude_linux": r"""The zip contains `install-claude.sh`, the `claude` binary, and `settings.json`. Set `YOUR_HOST` and `YOUR_TOKEN` in `settings.json`, then run the commands. The script copies `settings.json` to `~/.claude/settings.json` and copies the CLI next to an existing `claude` on PATH, or into `~/.local/bin` on a first install.
+    "claude_linux": r"""The zip contains `install-claude.sh`, the `claude` binary, and `settings.json`. Set `YOUR_HOST` in `settings.json`. Yaver passes `AI_API_KEY` to Claude. Do not paste the key into `settings.json`. Then run the commands. The script copies `settings.json` to `~/.claude/settings.json` and copies the CLI next to an existing `claude` on PATH, or into `~/.local/bin` on a first install.
 
 ```
 mkdir -p "$HOME/claude"
@@ -272,7 +273,7 @@ nano claude/settings.json
 ./install-claude.sh
 ```
 """,
-    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The install command copies `config.toml` to `%USERPROFILE%\.codex\config.toml` and the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. Open a new terminal afterward.
+    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The key is read from `AI_API_KEY`. The install command copies `config.toml` to `%USERPROFILE%\.codex\config.toml` and the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. Open a new terminal afterward.
 
 PowerShell:
 
@@ -285,7 +286,7 @@ notepad codex\config.toml
 .\install-codex.bat
 ```
 """,
-    "codex_linux": r"""The zip contains `install-codex.sh`, the `codex` binary, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The token is the `CUSTOM_HOST_TOKEN` environment variable. The script copies `config.toml` to `~/.codex/config.toml` and copies the CLI next to an existing `codex` on PATH, or into `~/.local/bin` on a first install.
+    "codex_linux": r"""The zip contains `install-codex.sh`, the `codex` binary, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The key is read from `AI_API_KEY`. The script copies `config.toml` to `~/.codex/config.toml` and copies the CLI next to an existing `codex` on PATH, or into `~/.local/bin` on a first install.
 
 ```
 mkdir -p "$HOME/codex"
