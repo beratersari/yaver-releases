@@ -30,7 +30,7 @@
       <h3>Linux</h3>
       {{ sections[item.linux_copy] }}
       {% if item.id == "opencode" %}
-      <p class="warn" role="note"><strong>Warning</strong>: Remove anything that already exists under the user's <code>.config/opencode</code> path. Config and agent files are kept in that folder. On Windows the path is <code>%USERPROFILE%\.config\opencode</code>. On Linux the path is <code>~/.config/opencode</code>.</p>
+      <p class="warn" role="note"><strong>Warning</strong>: The installer writes <code>opencode.json</code> and the CLI under the user's <code>.opencode</code> folder. On Windows that folder is <code>%USERPROFILE%\.opencode</code>. On Linux it is <code>~/.opencode</code>. Settings Sync also copies agents into <code>%USERPROFILE%\.opencode\agents</code> and <code>%USERPROFILE%\.config\opencode\agents</code> on Windows, and into <code>~/.opencode/agents</code> and <code>~/.config/opencode/agents</code> on Linux. Leave those folders in place.</p>
       {% endif %}
       <div class="sample">
         <div class="sample-bar">

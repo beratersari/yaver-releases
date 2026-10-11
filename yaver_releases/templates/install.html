@@ -1,25 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Install Yaver{% endblock %}
 {% block body %}
-<section class="need" aria-label="Required software">
+<section class="need" aria-label="Workers">
   <p class="need-kicker">Before anything else</p>
-  <p class="need-title">You must install OpenCode to use Yaver.</p>
-  <p class="need-copy">Claude Code and Codex are optional. Install them only when you want those workers.</p>
+  <p class="need-title">Install the worker selected in Settings.</p>
+  <p class="need-copy">How to use sets Worker to OpenCode. Claude Code and Codex are the other workers. Install the one you select.</p>
   <div class="need-grid">
     <a class="need-card is-required" href="/dependencies#opencode">
-      <span class="tag need-tag">Required</span>
+      <span class="tag need-tag">How to use</span>
       <strong>OpenCode</strong>
-      <span>Yaver does not run without this.</span>
+      <span>An OpenCode job needs this CLI.</span>
     </a>
     <a class="need-card" href="/dependencies#claude">
-      <span class="tag">Optional</span>
+      <span class="tag">Other worker</span>
       <strong>Claude Code</strong>
-      <span>Leave this out unless you choose it.</span>
+      <span>Install this when Worker is Claude Code.</span>
     </a>
     <a class="need-card" href="/dependencies#codex">
-      <span class="tag">Optional</span>
+      <span class="tag">Other worker</span>
       <strong>Codex</strong>
-      <span>Leave this out unless you choose it.</span>
+      <span>Install this when Worker is Codex.</span>
     </a>
   </div>
 </section>

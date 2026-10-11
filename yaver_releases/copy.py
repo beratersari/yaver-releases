@@ -233,12 +233,13 @@ chmod 755 update.sh
 1. If the page asks you to sign in, use `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` from `.env`.
 2. Open Settings.
 3. Enter the Jira host, the token, and the board.
-4. Enter the GitLab trigger user.
-5. Enter the Azure collection and the Azure trigger user.
-6. Open Agent. Set Worker to OpenCode. Set Default model to a model that is already in `opencode.json`. On Windows that file is `%USERPROFILE%\\.opencode\\opencode.json`. On Linux it is `~/.opencode/opencode.json`. Use the `model` value from that file, such as `custom/YOUR_MODEL`.
-7. Save.
+4. Enter the Jira trigger user. Use the display name or username, with no `@`. To Do tickets assigned to that name are accepted. If you leave it empty, Yaver accepts an assignee named `jira ai bot`, `jira-ai-bot`, `jiraai`, or `devbot`. Trigger label is optional. When you set it, the ticket also needs that label.
+5. For GitLab, add the host and its PAT, and enter the GitLab trigger user. Turn Enabled on when comments and merge requests should start work.
+6. For Azure, add the collection URL and its PAT, and enter the Azure trigger user. Turn Enabled on when pull requests and work items should start work.
+7. Open Agent. Set Worker to OpenCode. Set Default model to a model that is already in `opencode.json`. On Windows that file is `%USERPROFILE%\\.opencode\\opencode.json`. On Linux it is `~/.opencode/opencode.json`. Use the `model` value from that file, such as `custom/YOUR_MODEL`. Codex and Claude Code are the other workers. Install one of those only when you select it here.
+8. Save.
 
-Do this before the first job. Yaver uses these values to find your tickets and to sign its comments. OpenCode must already be installed. The Install page has that step.
+Do this before the first job. Yaver uses these values to find your tickets and to sign its comments. An OpenCode job needs OpenCode installed. The Install page has that step.
 """,
     "use_scheduled": """Open Scheduled when you are ready to start something.
 
@@ -312,22 +313,22 @@ You can also start the review on the pull request itself. Assign the Azure trigg
 
 The list shows each run. Open the one you just started. You see that run's prompt and its log.
 
-When a plan is ready, this page shows Implement, Revise, and Stop work. The next three steps are those buttons.
+When a plan is ready, this page shows Implement and Revise. The next two steps are those buttons. Stop work appears while a run is still pending, planning, or executing. It is absent while a plan is waiting.
 """,
     "use_implement": """Use this after a plan is ready and you want the code.
 
 1. Open Jobs and open the run.
 2. Choose Implement.
-3. On a Jira ticket, Yaver renames the label `plan_ready` to `plan_execute` and starts writing code.
-4. On an Azure work item, Yaver posts `/planExecute` and starts writing code.
-5. Yaver pushes the branch and opens a merge request or a pull request.
+3. On a Jira ticket, Yaver moves the ticket to In Progress when it can, and renames the label `plan_ready` to `plan_execute`. The build starts on the next poll.
+4. On an Azure work item, Yaver posts `/planExecute` for the Azure trigger user. That hands the build to the work-item path.
+5. When that build succeeds, Yaver pushes the branch and opens a merge request or a pull request.
 """,
     "use_revise": """Use this when the plan needs a change before any code is written.
 
 1. Open Jobs and open the run.
 2. Choose Revise.
 3. Type a short note about what should change, then confirm.
-4. On Jira, Yaver removes `plan_ready` and adds `plan_refactor`, then updates the plan.
+4. On Jira, Yaver posts a comment that mentions the Jira trigger user, removes `plan_ready` and `plan_execute`, and adds `plan_refactor`. The revision starts on the next poll.
 5. On an Azure work item, Yaver posts `/planRefactor` with your note.
 """,
     "use_stop": """Use this when you want the current run to stop.
@@ -361,8 +362,8 @@ Mode: plan
 
 5. Wait for the next poll. Yaver accepts the ticket, moves it to In Progress, and posts the plan as a comment.
 6. Yaver adds the label `plan_ready` and stops. This step does not push code.
-7. To write the code on that same ticket, keep it In Progress and rename `plan_ready` to `plan_execute`. Choose Implement on the job to do that rename.
-8. To change the plan, choose Revise on the job. That removes `plan_ready` and adds `plan_refactor`. Changing Mode to build on this ticket does not start the code.
+7. To write the code on that same ticket, keep it In Progress and rename `plan_ready` to `plan_execute`. Choose Implement on the job to do that rename. The build starts on the next poll.
+8. To change the plan, choose Revise on the job. That posts a comment for the Jira trigger user, removes `plan_ready` and `plan_execute`, and adds `plan_refactor`. The revision starts on the next poll. Changing Mode to build on this ticket does not start the code.
 9. A new ticket with `Mode: build`, and the same repository, source branch, and target branch, implements that plan in its own run. Yaver pushes the branch and opens a merge request.
 10. When a run is finished and you want it again, move the ticket back to To Do and leave it assigned to the trigger user.
 """,
@@ -379,7 +380,7 @@ Mode: plan
 4. Yaver replies on that thread. When the agent commits, Yaver pushes and opens or updates the merge request or pull request.
 5. For a review, comment `@yaver /review`. For a question, comment `@yaver /ask`. Both read the change and do not push. An empty `/review` approves the GitLab merge request. `/ask` posts the overview and leaves approval to `/review`. A mention with no command posts a short usage note and does not start a job.
 6. Assign the GitLab trigger user as a reviewer on the merge request. That starts the same review as `@yaver /review` and does not push. Opening a merge request that already lists that user as a reviewer starts it too. A draft merge request does not start the review when it is opened. A new commit by itself does not start another review.
-7. A finished `/review`, `/ask`, or `/yaver` reply is marked reviewed, so the merge request shows Re-request review. Re-request review starts the review again and does not push. An empty `/review` approves the merge request, and Re-request review still starts the review again after that.
+7. A finished `/review` that has findings, a finished `/ask`, and a finished `/yaver` reply are marked reviewed, so the merge request shows Re-request review. An empty `/review` approves the merge request. Re-request review starts the review again and does not push, including after that approval.
 8. Assign the Azure trigger user as a reviewer on the pull request. That starts the same review and does not push. Opening a pull request that already lists that user as a reviewer starts it too. A draft pull request does not start the review when it is opened. A new commit by itself does not start another review.
 """,
     "use_azure": """Use this on the Azure Boards website, on the work item.
@@ -404,7 +405,7 @@ To change the plan, comment:
 
 These two commands belong on the work item. A pull request comment ignores them.
 
-Set `Mode: build` when the first assignment should write the code, with no plan step. Moving In Progress back to To Do, while the item stays assigned, does not run it again. After an error, assign the item again.
+Set `Mode: build` when the first assignment should write the code, with no plan step. Moving In Progress back to To Do, while the item stays assigned, does not run it again. After an error, change the title or the description while the item stays assigned to the Azure trigger user, on To Do or In Progress.
 
 Assigning the work item starts the plan or the build. Assign the Azure trigger user as a reviewer on the pull request to start a review.
 """,
@@ -419,7 +420,7 @@ Assigning the work item starts the plan or the build. Assign the Azure trigger u
         "copies the agents. The Linux commands use `unzip` and `nano`. If "
         "either is missing, run `sudo apt-get install -y unzip nano` once."
     ),
-    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST` and `YOUR_MODEL` in `opencode.json`. The key is read from `AI_API_KEY`. Then run the commands. The install command copies `opencode.json` to `%USERPROFILE%\.opencode\opencode.json`, copies the CLI to `%USERPROFILE%\.opencode\bin`, and adds that folder to your user PATH. Open a new terminal afterward.
+    "opencode_windows": r"""The zip contains `install-opencode.bat`, `opencode.exe`, and `opencode.json`. Set `YOUR_HOST` and `YOUR_MODEL` in `opencode.json`. The key is read from `AI_API_KEY`. Then run the commands. The install command copies `opencode.json` to `%USERPROFILE%\.opencode\opencode.json`. If `opencode.exe` is already on PATH, the installer replaces that file and renames the old one with the date. On a first install the CLI goes to `%USERPROFILE%\.opencode\bin`, and that folder is added to your user PATH. Open a new terminal afterward.
 
 PowerShell:
 
@@ -444,7 +445,7 @@ nano opencode/opencode.json
 ./install-opencode.sh
 ```
 """,
-    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` in `settings.json`. Yaver passes `AI_API_KEY` to Claude. Do not paste the key into `settings.json`. Then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json` and the CLI to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
+    "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` in `settings.json`. Yaver passes `AI_API_KEY` to Claude. Do not paste the key into `settings.json`. Then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json`. If `claude.exe` is already on PATH, the installer replaces that file and renames the old one with the date. On a first install the CLI goes to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
 
 PowerShell:
 
@@ -469,7 +470,7 @@ nano claude/settings.json
 ./install-claude.sh
 ```
 """,
-    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The key is read from `AI_API_KEY`. The install command copies `config.toml` to `%USERPROFILE%\.codex\config.toml` and the CLI to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. Open a new terminal afterward.
+    "codex_windows": r"""The zip contains `install-codex.bat`, `codex.exe`, and `config.toml`. Set `YOUR_HOST` and `YOUR_MODEL` in `config.toml`. The key is read from `AI_API_KEY`. The install command copies `config.toml` to `%USERPROFILE%\.codex\config.toml`. If `codex.exe` is already on PATH, the installer replaces that file and renames the old one with the date. On a first install the CLI goes to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`. Open a new terminal afterward.
 
 PowerShell:
 

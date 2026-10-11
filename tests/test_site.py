@@ -71,7 +71,9 @@ def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
     assert page.status_code == 200
     assert "<h1>How to use Yaver</h1>" in page.text
     assert 'id="dashboard"' in page.text
-    assert "You can do everything there." in page.text
+    assert "You can do everything there." not in page.text
+    assert "@name /ask" in page.text
+    assert "That command is not a button on the dashboard." in page.text
     assert "start at step 1" not in page.text
     assert "Open Using it from the dashboard and follow the sections inside." in page.text
     assert "Using it on those websites is harder." in page.text
@@ -111,7 +113,17 @@ def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
     assert page.text.count("Assign the Azure trigger user as a reviewer") == 3
     assert "git.pullrequest.reviewers.update" in page.text
     assert "A draft merge request does not start the review when it is opened." in page.text
-    assert page.text.count("Re-request review") == 5
+    assert page.text.count("Re-request review") == 4
+    assert "Implement, Revise, and Stop work" not in page.text
+    assert "this page shows Implement and Revise" in page.text
+    assert "The build starts on the next poll." in page.text
+    assert "The revision starts on the next poll." in page.text
+    assert "Enter the Jira trigger user." in page.text
+    assert "jira ai bot" in page.text
+    assert "After an error, assign the item again." not in page.text
+    assert "change the title or the description" in page.text
+    assert "A finished <code>/review</code>, <code>/ask</code>, or <code>/yaver</code> reply is marked reviewed" not in page.text
+    assert "A finished <code>/review</code> that has findings" in page.text
     assert "Re-request review starts the review again and does not push." in page.text
     assert "<code>http://&lt;ip&gt;:8080</code>" in page.text
     assert "Set Default model to a model that is already in" in page.text
@@ -160,9 +172,12 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert client.get("/api/latest?platform=../windows").status_code == 404
     install = client.get("/install")
     assert install.status_code == 200
-    assert "You must install OpenCode to use Yaver." in install.text
-    assert "Claude Code and Codex are optional." in install.text
-    assert install.text.index("You must install OpenCode") < install.text.index('id="windows"')
+    assert "Install the worker selected in Settings." in install.text
+    assert "How to use sets Worker to OpenCode." in install.text
+    assert "Claude Code and Codex are the other workers." in install.text
+    assert "You must install OpenCode to use Yaver." not in install.text
+    assert "Yaver does not run without this." not in install.text
+    assert install.text.index("Install the worker selected") < install.text.index('id="windows"')
     assert 'href="/dependencies#opencode"' in install.text
     script = client.get("/static/theme.js")
     assert script.status_code == 200
@@ -1603,18 +1618,21 @@ def test_certificate_address_is_the_external_link_in_the_description(tmp_path: P
     assert "curl.exe -fL" not in cert
 
 
-def test_opencode_warns_to_clear_the_config_folder(tmp_path: Path):
+def test_opencode_warning_names_the_install_folder(tmp_path: Path):
     client = _client(tmp_path)
     page = client.get("/dependencies")
     text = page.text
     opencode = text[text.index('id="opencode"'):text.index('id="claude"')]
     claude = text[text.index('id="claude"'):text.index('id="codex"')]
     assert "<strong>Warning</strong>:" in opencode
-    assert "Remove anything that already exists under the user's" in opencode
-    assert ".config/opencode" in opencode
-    assert "%USERPROFILE%\\.config\\opencode" in opencode
-    assert "~/.config/opencode" in opencode
-    assert "Config and agent files are kept in that folder." in opencode
+    assert "Remove anything that already exists under the user's" not in opencode
+    assert "Config and agent files are kept in that folder." not in opencode
+    assert ".opencode" in opencode
+    assert "%USERPROFILE%\\.opencode" in opencode
+    assert "~/.opencode" in opencode
+    assert "%USERPROFILE%\\.config\\opencode\\agents" in opencode
+    assert "~/.config/opencode/agents" in opencode
+    assert "Leave those folders in place." in opencode
     assert opencode.index("./install-opencode.sh") < opencode.index("<strong>Warning</strong>:")
     assert opencode.index("<strong>Warning</strong>:") < opencode.index("sample-config")
     assert "<strong>Warning</strong>:" not in claude
