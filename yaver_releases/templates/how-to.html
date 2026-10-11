@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}How to use Yaver{% endblock %}
+{% block body %}
+<p class="kicker">Daily work</p>
+<h1>How to use Yaver</h1>
+
+<section class="need" id="dashboard" aria-labelledby="dashboard-title">
+  <p class="need-kicker">Use this</p>
+  <h2 class="need-title" id="dashboard-title">Use the dashboard. You can do everything there.</h2>
+  <p class="need-copy">The Yaver dashboard is the page at <code>http://&lt;ip&gt;:8080</code>. Open Using it from the dashboard and follow the sections inside. That is the easier way. Using it from external sites is for the Jira, GitLab, or Azure website. Using it on those websites is harder.</p>
+</section>
+
+<div class="folds">
+  <details class="fold" id="from-dashboard">
+    <summary><h2>Using it from the dashboard</h2></summary>
+    <div class="fold-body">
+<div class="folds">
+  <details class="fold" id="dash-settings">
+    <summary><h2>1. Save Settings</h2></summary>
+    <div class="fold-body">{{ sections.use_settings }}</div>
+  </details>
+  <details class="fold" id="dash-scheduled">
+    <summary><h2>2. Start from Scheduled</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_scheduled }}
+      <div class="folds">
+        <details class="fold" id="dash-existing-issue">
+          <summary><h3>2.1 Run an existing Jira issue</h3></summary>
+          <div class="fold-body">{{ sections.use_existing_issue }}</div>
+        </details>
+        <details class="fold" id="dash-existing-work-item">
+          <summary><h3>2.2 Run an existing Azure work item</h3></summary>
+          <div class="fold-body">{{ sections.use_existing_work_item }}</div>
+        </details>
+        <details class="fold" id="dash-new-issue">
+          <summary><h3>2.3 Create a Jira issue</h3></summary>
+          <div class="fold-body">{{ sections.use_new_issue }}</div>
+        </details>
+        <details class="fold" id="dash-new-work-item">
+          <summary><h3>2.4 Create an Azure work item</h3></summary>
+          <div class="fold-body">{{ sections.use_new_work_item }}</div>
+        </details>
+        <details class="fold" id="dash-existing-mr">
+          <summary><h3>2.5 Continue or review a GitLab merge request</h3></summary>
+          <div class="fold-body">{{ sections.use_existing_mr }}</div>
+        </details>
+        <details class="fold" id="dash-existing-pr">
+          <summary><h3>2.6 Continue or review an Azure pull request</h3></summary>
+          <div class="fold-body">{{ sections.use_existing_pr }}</div>
+        </details>
+      </div>
+    </div>
+  </details>
+  <details class="fold" id="dash-jobs">
+    <summary><h2>3. Open the job</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_jobs }}
+      <div class="folds">
+        <details class="fold" id="dash-implement">
+          <summary><h3>3.1 Choose Implement</h3></summary>
+          <div class="fold-body">{{ sections.use_implement }}</div>
+        </details>
+        <details class="fold" id="dash-revise">
+          <summary><h3>3.2 Choose Revise</h3></summary>
+          <div class="fold-body">{{ sections.use_revise }}</div>
+        </details>
+        <details class="fold" id="dash-stop">
+          <summary><h3>3.3 Choose Stop work</h3></summary>
+          <div class="fold-body">{{ sections.use_stop }}</div>
+        </details>
+      </div>
+    </div>
+  </details>
+</div>
+    </div>
+  </details>
+  <details class="fold" id="from-external">
+    <summary><h2>Using it from external sites</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_intro }}
+<div class="folds">
+  <details class="fold" id="jira">
+    <summary><h2>Using it from the Jira website</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_jira }}
+    </div>
+  </details>
+  <details class="fold" id="review">
+    <summary><h2>Using it from the GitLab or Azure website</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_review }}
+    </div>
+  </details>
+  <details class="fold" id="azure">
+    <summary><h2>Using it from the Azure Boards website</h2></summary>
+    <div class="fold-body">
+      {{ sections.use_azure }}
+    </div>
+  </details>
+</div>
+    </div>
+  </details>
+</div>
+{% endblock %}

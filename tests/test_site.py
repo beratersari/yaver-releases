@@ -65,6 +65,69 @@ def _sign_in(client: TestClient) -> None:
     assert signed.headers["location"] == "/admin"
 
 
+def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
+    client = _client(tmp_path)
+    page = client.get("/how-to")
+    assert page.status_code == 200
+    assert "<h1>How to use Yaver</h1>" in page.text
+    assert 'id="dashboard"' in page.text
+    assert "You can do everything there." in page.text
+    assert "start at step 1" not in page.text
+    assert "Open Using it from the dashboard and follow the sections inside." in page.text
+    assert "Using it on those websites is harder." in page.text
+    assert "Using the dashboard is strongly recommended." in page.text
+    assert "It is easier." in page.text
+    assert "You can also use Yaver from the Jira website, the GitLab or Azure website, or the Azure Boards website." in page.text
+    assert page.text.index(">Using it from the dashboard<") < page.text.index(">1. Save Settings<")
+    assert page.text.index(">1. Save Settings<") < page.text.index(">2. Start from Scheduled<")
+    assert page.text.index(">2. Start from Scheduled<") < page.text.index(">2.1 Run an existing Jira issue<")
+    assert page.text.index(">2.1 Run an existing Jira issue<") < page.text.index(">2.2 Run an existing Azure work item<")
+    assert page.text.index(">2.2 Run an existing Azure work item<") < page.text.index(">2.3 Create a Jira issue<")
+    assert page.text.index(">2.3 Create a Jira issue<") < page.text.index(">2.4 Create an Azure work item<")
+    assert page.text.index(">2.4 Create an Azure work item<") < page.text.index(">2.5 Continue or review a GitLab merge request<")
+    assert page.text.index(">2.5 Continue or review a GitLab merge request<") < page.text.index(">2.6 Continue or review an Azure pull request<")
+    assert page.text.index(">2.6 Continue or review an Azure pull request<") < page.text.index(">3. Open the job<")
+    assert page.text.index(">3. Open the job<") < page.text.index(">3.1 Choose Implement<")
+    assert page.text.index(">3.1 Choose Implement<") < page.text.index(">3.2 Choose Revise<")
+    assert page.text.index(">3.2 Choose Revise<") < page.text.index(">3.3 Choose Stop work<")
+    assert page.text.index(">3.3 Choose Stop work<") < page.text.index(">Using it from external sites<")
+    assert page.text.index(">Using it from external sites<") < page.text.index(">Using it from the Jira website<")
+    assert page.text.index(">Using it from the Jira website<") < page.text.index(">Using it from the GitLab or Azure website<")
+    assert page.text.index(">Using it from the GitLab or Azure website<") < page.text.index(">Using it from the Azure Boards website<")
+    assert "start from the Jira ticket" not in page.text
+    assert "Start from the Jira ticket" not in page.text
+    assert "GitLab review" in page.text
+    assert "/ask" in page.text
+    assert page.text.index('id="from-dashboard"') < page.text.index('id="dash-settings"')
+    assert page.text.index('id="from-external"') < page.text.index('id="jira"')
+    assert page.text.index('id="dashboard"') < page.text.index('id="dash-scheduled"') < page.text.index('id="jira"')
+    assert 'id="jira"' in page.text
+    assert 'id="review"' in page.text
+    assert 'id="azure"' in page.text
+    assert "plan_execute" in page.text
+    assert "@yaver /review" in page.text
+    assert "/planExecute" in page.text
+    assert page.text.count("Assign the GitLab trigger user as a reviewer") == 2
+    assert page.text.count("Assign the Azure trigger user as a reviewer") == 3
+    assert "git.pullrequest.reviewers.update" in page.text
+    assert "A draft merge request does not start the review when it is opened." in page.text
+    assert page.text.count("Re-request review") == 5
+    assert "Re-request review starts the review again and does not push." in page.text
+    assert "<code>http://&lt;ip&gt;:8080</code>" in page.text
+    assert "Set Default model to a model that is already in" in page.text
+    assert "opencode.json" in page.text
+    assert "127.0.0.1:8080" not in page.text
+    assert 'aria-current="page"' in page.text
+    assert 'href="/admin"' not in page.text
+    assert 'href="/how-to"' in client.get("/install").text
+    opened = [
+        tag
+        for tag in page.text.split("<details")
+        if tag.startswith(" ") and " open" in tag.split(">", 1)[0]
+    ]
+    assert opened == []
+
+
 def test_home_and_health_before_any_upload(tmp_path: Path):
     client = _client(tmp_path)
     health = client.get("/api/health")
@@ -75,7 +138,7 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "LAN releases" not in home.text
     assert "Install" in home.text
     assert 'href="/admin"' not in home.text
-    assert home.text.index(">Install<") < home.text.index(">Release history<") < home.text.index(">Dependencies<")
+    assert home.text.index(">Install<") < home.text.index(">How to use<") < home.text.index(">Release history<") < home.text.index(">Dependencies<")
     releases = client.get("/releases")
     assert releases.status_code == 200
     assert "Release history" in releases.text
@@ -160,6 +223,8 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert install.text.count("setsid nohup ./yaver start") == 4
     assert install.text.count("nano .env") == 5
     assert "notepad .env" in install.text
+    assert install.text.count("<code>http://&lt;ip&gt;:8080</code>") == 2
+    assert "127.0.0.1:8080" not in install.text
     assert ".\\install-agents.bat" in install.text
     assert install.text.count("./install-agents.sh") == 4
     assert install.text.count("./update.sh") == 4
@@ -1232,7 +1297,7 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     client.get("/api/latest?platform=ubuntu-22.04&current=0.9.80")
 
     _sign_in(client)
-    for public in ("/", "/install", "/releases", "/dependencies"):
+    for public in ("/", "/install", "/releases", "/dependencies", "/how-to"):
         assert 'href="/admin/analytics"' not in client.get(public).text
     page = client.get("/admin/analytics")
     assert page.status_code == 200

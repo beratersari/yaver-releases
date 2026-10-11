@@ -53,17 +53,21 @@
           <span class="idx">01</span>
           <span>Install</span>
         </a>
-        <a href="/releases" class="{% if path == '/releases' %}active{% endif %}" {% if path == '/releases' %}aria-current="page"{% endif %}>
+        <a href="/how-to" class="{% if path == '/how-to' %}active{% endif %}" {% if path == '/how-to' %}aria-current="page"{% endif %}>
           <span class="idx">02</span>
+          <span>How to use</span>
+        </a>
+        <a href="/releases" class="{% if path == '/releases' %}active{% endif %}" {% if path == '/releases' %}aria-current="page"{% endif %}>
+          <span class="idx">03</span>
           <span>Release history</span>
         </a>
         <a href="/dependencies" class="{% if path == '/dependencies' %}active{% endif %}" {% if path == '/dependencies' %}aria-current="page"{% endif %}>
-          <span class="idx">03</span>
+          <span class="idx">04</span>
           <span>Dependencies</span>
         </a>
         {% if show_analytics_nav %}
         <a href="/admin/analytics" class="{% if path.startswith('/admin/analytics') %}active{% endif %}" {% if path.startswith('/admin/analytics') %}aria-current="page"{% endif %}>
-          <span class="idx">04</span>
+          <span class="idx">05</span>
           <span>Analytics</span>
         </a>
         {% endif %}

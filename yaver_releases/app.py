@@ -236,6 +236,14 @@ def create_app(
             _public_context(request, store),
         )
 
+    @app.get("/how-to", response_class=HTMLResponse)
+    def how_to(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "how-to.html",
+            _public_context(request, store),
+        )
+
     @app.get("/releases", response_class=HTMLResponse)
     def release_history(request: Request) -> HTMLResponse:
         context = _public_context(request, store)

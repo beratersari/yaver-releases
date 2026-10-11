@@ -1,10 +1,10 @@
 # Yaver releases
 
-A small site for the office network. Install is the first page. Release history lists each published version as its own section, with a download for Windows and for each Ubuntu version. OpenCode, Claude Code, and Codex are on the Dependencies page. An admin uploads one Yaver zip that contains the Windows zip and one zip for each Ubuntu version, plus one zip for each of those tools on Windows and on Linux. Colleagues still download each system on its own. A newer upload keeps the older version in the history. When the Yaver zip contains `RELEASE_NOTES.txt`, that text is the release note for the version.
+A small site for the office network. Install is the first page. How to use walks a first visit through the dashboard, which is the easier way. The same page then covers the Jira website, the GitLab or Azure website, and the Azure Boards website. Using those websites is harder. Release history lists each published version as its own section, with a download for Windows and for each Ubuntu version. OpenCode, Claude Code, and Codex are on the Dependencies page. An admin uploads one Yaver zip that contains the Windows zip and one zip for each Ubuntu version, plus one zip for each of those tools on Windows and on Linux. Colleagues still download each system on its own. A newer upload keeps the older version in the history. When the Yaver zip contains `RELEASE_NOTES.txt`, that text is the release note for the version.
 
 Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT` in the install `.env`. From the Yaver folder, run `update.bat` on Windows or `./update.sh` on Ubuntu. The script stops Yaver in that folder, downloads the package for that computer, and replaces the program files. `.env` and the script you ran stay. Start Yaver after the script finishes.
 
-The install page, Release history, and the Dependencies page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
+The install page, How to use, Release history, and the Dependencies page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
 
 ## Run
 

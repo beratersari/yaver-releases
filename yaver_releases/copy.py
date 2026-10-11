@@ -28,6 +28,22 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("ubuntu22", "Ubuntu 22.04", "Install"),
     ("ubuntu24", "Ubuntu 24.04", "Install"),
     ("ubuntu_update", "Ubuntu update, shown in each version", "Install"),
+    ("use_settings", "1. Save Settings", "How to use"),
+    ("use_scheduled", "2. Start from Scheduled", "How to use"),
+    ("use_existing_issue", "2.1 Run an existing Jira issue", "How to use"),
+    ("use_existing_work_item", "2.2 Run an existing Azure work item", "How to use"),
+    ("use_new_issue", "2.3 Create a Jira issue", "How to use"),
+    ("use_new_work_item", "2.4 Create an Azure work item", "How to use"),
+    ("use_existing_mr", "2.5 Continue or review a GitLab merge request", "How to use"),
+    ("use_existing_pr", "2.6 Continue or review an Azure pull request", "How to use"),
+    ("use_jobs", "3. Open the job", "How to use"),
+    ("use_implement", "3.1 Choose Implement", "How to use"),
+    ("use_revise", "3.2 Choose Revise", "How to use"),
+    ("use_stop", "3.3 Choose Stop work", "How to use"),
+    ("use_intro", "How to use introduction", "How to use"),
+    ("use_jira", "Using it from the Jira website", "How to use"),
+    ("use_review", "Using it from the GitLab or Azure website", "How to use"),
+    ("use_azure", "Using it from the Azure Boards website", "How to use"),
     ("deps_intro", "Dependencies introduction", "Dependencies"),
     ("opencode_windows", "OpenCode on Windows", "Dependencies"),
     ("opencode_linux", "OpenCode on Linux", "Dependencies"),
@@ -183,7 +199,7 @@ notepad .env
 .\\yaver.exe
 ```
 
-Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+Then open `http://<ip>:8080`.
 """,
     "windows_update": r"""```
 cd C:\path\to\yaver
@@ -200,7 +216,7 @@ update.bat
         "`sudo apt-get install -y nano` once. Run Yaver as the account "
         "that should own the work. Do not use root. The log is `yaver.log` "
         "in that folder. The commands allow TCP and UDP port 8080 in ufw. Open "
-        "[http://127.0.0.1:8080](http://127.0.0.1:8080) on that machine."
+        "`http://<ip>:8080` on that machine."
     ),
     "ubuntu18": _ubuntu_steps("18.04", "ubuntu18"),
     "ubuntu20": _ubuntu_steps("20.04", "ubuntu20"),
@@ -211,6 +227,186 @@ cd "$HOME/yaver"
 chmod 755 update.sh
 ./update.sh
 ```
+""",
+    "use_settings": """Open the dashboard at `http://<ip>:8080`.
+
+1. If the page asks you to sign in, use `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` from `.env`.
+2. Open Settings.
+3. Enter the Jira host, the token, and the board.
+4. Enter the GitLab trigger user.
+5. Enter the Azure collection and the Azure trigger user.
+6. Open Agent. Set Worker to OpenCode. Set Default model to a model that is already in `opencode.json`. On Windows that file is `%USERPROFILE%\\.opencode\\opencode.json`. On Linux it is `~/.opencode/opencode.json`. Use the `model` value from that file, such as `custom/YOUR_MODEL`.
+7. Save.
+
+Do this before the first job. Yaver uses these values to find your tickets and to sign its comments. OpenCode must already be installed. The Install page has that step.
+""",
+    "use_scheduled": """Open Scheduled when you are ready to start something.
+
+Run now starts the job immediately. Schedule waits until the time you pick.
+
+On a Jira issue or an Azure work item, Mode is plan, build, or test. Choose plan the first time if you want to read the plan before Yaver writes code. Build writes the code. Test writes tests.
+
+A review uses a different form. Choose Existing MR for a GitLab merge request, or Existing PR for an Azure pull request. You can also assign the trigger user as a reviewer on that request. That starts the same review.
+""",
+    "use_existing_issue": """Use this when the Jira ticket already exists.
+
+1. Open Scheduled.
+2. Choose Existing issue, then Jira.
+3. Type the issue key, such as KAN-12, and choose Look up.
+4. Check the prompt, the repository, the branches, and the mode. If the ticket has no mode, the form shows build.
+5. Change anything you need.
+6. Choose Run now to start now, or Schedule to start later.
+
+Yaver writes those fields back onto the Jira ticket.
+""",
+    "use_existing_work_item": """Use this when the Azure work item already exists.
+
+1. Open Scheduled.
+2. Choose Existing issue, then Azure work item.
+3. Choose the collection, type the work item id, and choose Look up.
+4. Set the prompt, the repository, the branches, and the mode. Mode is plan, build, or test.
+5. Choose Run now to start now, or Schedule to start later.
+
+Yaver writes those fields back onto the work item.
+""",
+    "use_new_issue": """Use this when you do not have a Jira ticket yet.
+
+1. Open Scheduled.
+2. Choose New issue, then Jira.
+3. Type a title and a description.
+4. Add the repository, the source branch, and the target branch.
+5. Choose the issue type and Mode. Choose plan the first time if you want to read the plan before any code is written.
+6. Choose Create & run now to create the ticket and start. Choose Create schedule to create the ticket and wait until the time you set.
+""",
+    "use_new_work_item": """Use this when you do not have an Azure work item yet.
+
+1. Open Scheduled.
+2. Choose New issue, then Azure work item.
+3. Choose the collection and the team project.
+4. Type a title and a description. Add the repository and the branches.
+5. Choose the work item type and Mode.
+6. Choose Create & run now to create the work item and start. Choose Create schedule to wait until the time you set.
+""",
+    "use_existing_mr": """Use this when the GitLab merge request already exists.
+
+1. Open Scheduled.
+2. Choose Existing MR.
+3. Paste the repository URL, type the merge request number, and choose Look up.
+4. Write what you want Yaver to do.
+5. Choose the mode. Build posts your note and continues the work, and Yaver can commit and push. GitLab review reads the change and does not push. It is the same review as writing `@yaver /review` on the merge request. `/ask` is not on this form.
+6. Choose Run now to start now, or Schedule to start later.
+
+You can also start the review on the merge request itself. Assign the GitLab trigger user as a reviewer. That starts the same review. When the review finishes, the merge request shows Re-request review. Re-request review starts the review again and does not push.
+""",
+    "use_existing_pr": """Use this when the Azure pull request already exists.
+
+1. Open Scheduled.
+2. Choose Existing PR.
+3. Paste the Azure repository URL, type the pull request id, and choose Look up.
+4. Choose the mode. Build continues the work and can push. Azure review reads the change and does not push. It is the same review as `@yaver /review`. `/ask` is not on this form.
+5. Choose Run now to start now, or Schedule to start later.
+
+You can also start the review on the pull request itself. Assign the Azure trigger user as a reviewer. That starts the same review.
+""",
+    "use_jobs": """After you start a job, open Jobs.
+
+The list shows each run. Open the one you just started. You see that run's prompt and its log.
+
+When a plan is ready, this page shows Implement, Revise, and Stop work. The next three steps are those buttons.
+""",
+    "use_implement": """Use this after a plan is ready and you want the code.
+
+1. Open Jobs and open the run.
+2. Choose Implement.
+3. On a Jira ticket, Yaver renames the label `plan_ready` to `plan_execute` and starts writing code.
+4. On an Azure work item, Yaver posts `/planExecute` and starts writing code.
+5. Yaver pushes the branch and opens a merge request or a pull request.
+""",
+    "use_revise": """Use this when the plan needs a change before any code is written.
+
+1. Open Jobs and open the run.
+2. Choose Revise.
+3. Type a short note about what should change, then confirm.
+4. On Jira, Yaver removes `plan_ready` and adds `plan_refactor`, then updates the plan.
+5. On an Azure work item, Yaver posts `/planRefactor` with your note.
+""",
+    "use_stop": """Use this when you want the current run to stop.
+
+1. Open Jobs and open the run.
+2. Choose Stop work.
+
+Yaver cancels that run and stops the agent. The ticket stays where it is.
+""",
+    "use_intro": (
+        "The steps above are the dashboard. Using the dashboard is strongly "
+        "recommended. It is easier. You can also use Yaver from the Jira "
+        "website, the GitLab or Azure website, or the Azure Boards website. "
+        "The three sections below are those same jobs."
+    ),
+    "use_jira": """Use this on the Jira website.
+
+1. Create the ticket on the board you saved in Settings.
+2. Leave it on To Do.
+3. Assign it to the Jira trigger user.
+4. Put this block in the description. Change the repository and the branches to yours.
+
+```
+{params}
+Repository: https://gitlab.example.com/group/app.git
+Source branch: feature/KAN-12
+Target branch: develop
+Mode: plan
+{params}
+```
+
+5. Wait for the next poll. Yaver accepts the ticket, moves it to In Progress, and posts the plan as a comment.
+6. Yaver adds the label `plan_ready` and stops. This step does not push code.
+7. To write the code on that same ticket, keep it In Progress and rename `plan_ready` to `plan_execute`. Choose Implement on the job to do that rename.
+8. To change the plan, choose Revise on the job. That removes `plan_ready` and adds `plan_refactor`. Changing Mode to build on this ticket does not start the code.
+9. A new ticket with `Mode: build`, and the same repository, source branch, and target branch, implements that plan in its own run. Yaver pushes the branch and opens a merge request.
+10. When a run is finished and you want it again, move the ticket back to To Do and leave it assigned to the trigger user.
+""",
+    "use_review": """Use this on the GitLab website or the Azure website, on the merge request or the pull request.
+
+1. On GitLab, add a project webhook for comments and merge requests. The address is the computer running Yaver, port 8080, path `/yaver/webhook/gitlab`. Use the same secret as `GITLAB_WEBHOOK_SECRET`.
+2. On Azure, add a service hook to `/yaver/webhook/azure` on that same port. Azure has no webhook secret. Include pull request reviewers updated, `git.pullrequest.reviewers.update`, so assigning a reviewer can start a review.
+3. Comment on the merge request or pull request. The name is the trigger user you saved in Settings.
+
+```
+@yaver /yaver cover the limiter with unit tests
+```
+
+4. Yaver replies on that thread. When the agent commits, Yaver pushes and opens or updates the merge request or pull request.
+5. For a review, comment `@yaver /review`. For a question, comment `@yaver /ask`. Both read the change and do not push. An empty `/review` approves the GitLab merge request. `/ask` posts the overview and leaves approval to `/review`. A mention with no command posts a short usage note and does not start a job.
+6. Assign the GitLab trigger user as a reviewer on the merge request. That starts the same review as `@yaver /review` and does not push. Opening a merge request that already lists that user as a reviewer starts it too. A draft merge request does not start the review when it is opened. A new commit by itself does not start another review.
+7. A finished `/review`, `/ask`, or `/yaver` reply is marked reviewed, so the merge request shows Re-request review. Re-request review starts the review again and does not push. An empty `/review` approves the merge request, and Re-request review still starts the review again after that.
+8. Assign the Azure trigger user as a reviewer on the pull request. That starts the same review and does not push. Opening a pull request that already lists that user as a reviewer starts it too. A draft pull request does not start the review when it is opened. A new commit by itself does not start another review.
+""",
+    "use_azure": """Use this on the Azure Boards website, on the work item.
+
+1. Put the same `{params}` block on the work item. Use Mode plan the first time.
+2. Assign it to the Azure trigger user while the state is To Do or In Progress, or the matching column for that process, such as New, Active, or Doing.
+3. Yaver moves it to the in-progress column, posts the plan, and stops.
+
+To write the code, comment on the work item:
+
+```
+@yaver /planExecute
+```
+
+That implements the waiting plan and opens a pull request. The work item stays in progress. You close it when the pull request is done.
+
+To change the plan, comment:
+
+```
+@yaver /planRefactor tighten the API
+```
+
+These two commands belong on the work item. A pull request comment ignores them.
+
+Set `Mode: build` when the first assignment should write the code, with no plan step. Moving In Progress back to To Do, while the item stays assigned, does not run it again. After an error, assign the item again.
+
+Assigning the work item starts the plan or the build. Assign the Azure trigger user as a reviewer on the pull request to start a review.
 """,
     "deps_intro": (
         "OpenCode, Claude Code, and Codex are not inside the Yaver executable. "
@@ -329,6 +525,7 @@ def sections_for_edit(
                     "home_update",
                     "install_intro",
                     "ubuntu_intro",
+                    "use_intro",
                     "deps_intro",
                 },
             }
