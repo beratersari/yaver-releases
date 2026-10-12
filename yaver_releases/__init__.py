@@ -1,3 +1,3 @@
 """LAN homepage for Yaver releases and install notes."""
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
