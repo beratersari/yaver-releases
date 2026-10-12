@@ -345,7 +345,7 @@ Yaver cancels that run and stops the agent. The ticket stays where it is.
     "use_repos": """Use this when one ticket should change more than one git repository.
 
 1. Open Settings, then Projects. Save each remote you use. A pasted URL that is not saved can still be used on Scheduled.
-2. Optional: under Repo sets, save a named set. A set needs two or more repositories. You can save up to 20 sets.
+2. Optional: under Repo sets, save a named set. A set needs two or more repositories. You can save as many sets as you want.
 3. Open Scheduled and start a Jira issue, an Azure work item, or a new ticket.
 4. Under Repositories, choose Add repository for each remote, or choose a set under Add projects from a set. Select all adds the repositories shown in that list that are not already chosen.
 5. Set the source and the target for each repository. One repository runs alone. Two or more run together. Each one keeps its own source and target. A source of develop or main becomes `feature/<issue key>` on that repository.
