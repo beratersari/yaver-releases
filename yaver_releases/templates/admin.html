@@ -3,6 +3,10 @@
 {% block body %}
 <p class="kicker">Admin</p>
 <h1>Publish a release</h1>
+<p class="admin-jumps">
+  <a class="button secondary" href="#config-text">Config files</a>
+  <a class="button secondary" href="#page-text">Page text</a>
+</p>
 <p><a href="/admin/analytics">Installation analytics</a></p>
 <p class="lede">Upload one zip for Windows and every Ubuntu version. The files inside are named with the version, for example <code>yaver-windows-x64-0.9.79.zip</code> and <code>yaver-linux-x64-ubuntu-22.04-0.9.79.zip</code>. This form does not ask for a version. Colleagues still download each system on its own. A zip that contains only one folder is opened before those names are read. Dependency zips are separate: one tool, with a <code>VERSION</code> file that is that tool's version. update.bat and update.sh do not install those.</p>
 {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
@@ -108,6 +112,18 @@
 </table>
 </div>
 
+<h2 id="config-text">Config files</h2>
+<p id="config-hint" class="quiet">These are the sample files on the Dependencies page: OpenCode <code>opencode.json</code>, Claude Code <code>settings.json</code>, and Codex <code>config.toml</code>. Visitors copy the text as written. Saving here leaves the install instructions alone. Restore original text, under Page text, puts these files back too.</p>
+
+<form class="panel" method="post" action="/admin/copy">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for item in configs %}
+  <label for="copy-{{ item.key }}">{{ item.label }} · {{ item.filename }}</label>
+  <textarea id="copy-{{ item.key }}" name="{{ item.key }}" class="tall" maxlength="20000" spellcheck="false" aria-describedby="config-hint">{{ item.body }}</textarea>
+  {% endfor %}
+  <p><button type="submit">Save config files</button></p>
+</form>
+
 <h2 id="page-text">Page text</h2>
 <p id="copy-hint" class="quiet">This is the wording on the install page, How to use, Release history, and the Dependencies page. A line that is only ``` starts a command block. `backticks` mark a short command. [label](https://example/cert.crt) makes a link. The first external link in Dependencies introduction is the network certificate. These tokens are filled from the address the visitor used to open the page:</p>
 <p class="quiet">{% for name, detail in token_help %}<code>{{ name }}</code> {{ detail }}{% if not loop.last %}. {% endif %}{% endfor %}.</p>
@@ -123,6 +139,7 @@
 
 <form method="post" action="/admin/copy/reset">
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="quiet">This puts the page text and the three config files back.</p>
   <p><button class="secondary" type="submit">Restore original text</button></p>
 </form>
 

@@ -700,6 +700,15 @@ h2.need-title {
 .panel { margin-top: 0.75rem; }
 .panel + .panel { margin-top: 0.85rem; }
 
+.admin-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.admin-jumps .button { margin-top: 0; }
+
 .narrow { max-width: 28rem; }
 
 button:not(.theme),

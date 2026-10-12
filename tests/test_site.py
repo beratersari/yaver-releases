@@ -1720,6 +1720,105 @@ def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):
     assert "innerHTML" not in script.text
 
 
+def test_admin_can_edit_sample_configs_without_clearing_page_text(tmp_path: Path):
+    from yaver_releases.copy import DEFAULTS, SAMPLE_CONFIGS
+
+    client = _client(tmp_path)
+    _sign_in(client)
+    admin = client.get("/admin")
+    assert admin.status_code == 200
+    assert 'href="#config-text"' in admin.text
+    assert 'id="config-text"' in admin.text
+    assert "Save config files" in admin.text
+    shown = html_lib.unescape(admin.text)
+    for key, filename in (
+        ("config_opencode", "opencode.json"),
+        ("config_claude", "settings.json"),
+        ("config_codex", "config.toml"),
+    ):
+        assert f'name="{key}"' in admin.text
+        assert f'id="copy-{key}"' in admin.text
+        assert filename in shown
+    assert '"baseURL": "https://YOUR_HOST/v1"' in shown
+    assert SAMPLE_CONFIGS["claude"][1].strip() in shown
+    token = _csrf(admin.text)
+
+    kept = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token, "home_intro": "Kept intro for configs."},
+        follow_redirects=False,
+    )
+    assert kept.status_code == 303
+    assert kept.headers["location"] == "/admin?saved=text"
+    assert '"baseURL": "https://YOUR_HOST/v1"' in html_lib.unescape(client.get("/dependencies").text)
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    changed = '{\n  "baseURL": "https://office.example/v1"\n}\n'
+    saved = client.post(
+        "/admin/copy",
+        data={"csrf": token, "config_opencode": changed},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/admin?saved=config"
+    assert "Saved the config files." in client.get(saved.headers["location"]).text
+    deps = html_lib.unescape(client.get("/dependencies").text)
+    opencode = deps[deps.index('id="sample-opencode"'):deps.index("</textarea>", deps.index('id="sample-opencode"'))]
+    claude = deps[deps.index('id="sample-claude"'):deps.index("</textarea>", deps.index('id="sample-claude"'))]
+    assert "https://office.example/v1" in opencode
+    assert "https://YOUR_HOST/v1" not in opencode
+    assert '"ANTHROPIC_BASE_URL": "https://YOUR_HOST"' in claude
+    assert "Kept intro for configs." in client.get("/releases").text
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    again = client.post(
+        "/admin/copy",
+        data={**DEFAULTS, "csrf": token},
+        follow_redirects=False,
+    )
+    assert again.status_code == 303
+    assert "https://office.example/v1" in html_lib.unescape(client.get("/dependencies").text)
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    hostile = "</textarea><script>alert(1)</script>"
+    poisoned = client.post(
+        "/admin/copy",
+        data={"csrf": token, "config_claude": hostile},
+        follow_redirects=False,
+    )
+    assert poisoned.status_code == 303
+    shown = client.get("/dependencies").text
+    assert "<script>alert" not in shown
+    assert "&lt;/textarea&gt;&lt;script&gt;" in shown
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    too_long = client.post(
+        "/admin/copy",
+        data={"csrf": token, "config_codex": "x" * 20001},
+    )
+    assert too_long.status_code == 400
+    assert "20000" in too_long.text
+    assert "https://office.example/v1" in html_lib.unescape(client.get("/dependencies").text)
+
+    admin = client.get("/admin")
+    token = _csrf(admin.text)
+    reset = client.post(
+        "/admin/copy/reset",
+        data={"csrf": token},
+        follow_redirects=False,
+    )
+    assert reset.status_code == 303
+    restored = html_lib.unescape(client.get("/dependencies").text)
+    assert '"baseURL": "https://YOUR_HOST/v1"' in restored
+    assert "https://office.example/v1" not in restored
+    assert "&lt;script&gt;" not in client.get("/dependencies").text
+    assert "Kept intro for configs." not in client.get("/releases").text
+
+
 def test_static_types_survive_a_plain_text_windows_map(tmp_path: Path):
     """Windows has no .woff2 type, and some machines map .js to text/plain.
 

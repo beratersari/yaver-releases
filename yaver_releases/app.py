@@ -31,6 +31,7 @@ from yaver_releases.auth import (
 )
 from yaver_releases.copy import (
     CONFIG_DESTINATIONS,
+    CONFIGS,
     DEFAULTS,
     SAMPLE_CONFIGS,
     SECTIONS,
@@ -38,6 +39,8 @@ from yaver_releases.copy import (
     CopyError,
     certificate_url,
     clean_body,
+    config_body,
+    configs_for_edit,
     public_html,
     render_copy,
     sections_for_edit,
@@ -419,13 +422,31 @@ def create_app(
         form = await request.form()
         csrf = str(form.get("csrf") or "")
         session = _require_admin(request, app, csrf)
-        drafts = {key: str(form.get(key) or "") for key, _label, _page in SECTIONS}
+        # A page-text save posts every section and no config key. A config
+        # save posts the three config keys and no section. Only those keys
+        # are written, so one form does not blank the other.
+        known = tuple(key for key, _label, _page in SECTIONS) + tuple(
+            key for key, _label, _filename in CONFIGS
+        )
+        config_keys = {key for key, _label, _filename in CONFIGS}
+        posted = [key for key in known if key in form]
+        if not posted:
+            return _admin_page(
+                request,
+                app,
+                session,
+                "",
+                "Choose page text or a config file to save.",
+                status_code=400,
+            )
+        drafts = {key: str(form.get(key) or "") for key in posted}
         try:
-            cleaned = {key: clean_body(drafts[key]) for key, _label, _page in SECTIONS}
+            cleaned = {key: clean_body(drafts[key]) for key in posted}
         except CopyError as exc:
             return _admin_page(request, app, session, "", str(exc), drafts=drafts, status_code=400)
         store.save_copy(cleaned)
-        return RedirectResponse("/admin?saved=text", status_code=303)
+        saved_as = "config" if config_keys.issuperset(posted) else "text"
+        return RedirectResponse(f"/admin?saved={saved_as}", status_code=303)
 
     @app.post("/admin/copy/reset")
     def reset_page_copy(request: Request, csrf: str = Form("")):
@@ -710,6 +731,8 @@ def _notice_for(uploaded: str, saved: str) -> str:
         return f"Published the {package_label(uploaded)} package."
     if saved == "text":
         return "Saved the page text."
+    if saved == "config":
+        return "Saved the config files."
     if saved == "reset":
         return "Restored the original page text."
     return ""
@@ -724,8 +747,9 @@ def _zip_response(path: Path, filename: str) -> FileResponse:
     )
 
 
-def _dependency_groups(rows: list[dict]) -> list[dict]:
+def _dependency_groups(rows: list[dict], stored: dict[str, str] | None = None) -> list[dict]:
     by_platform = {str(row["platform"]): row for row in rows}
+    stored = stored or {}
     specs = (
         ("opencode", "OpenCode", "opencode_windows", "opencode_linux"),
         ("claude", "Claude Code", "claude_windows", "claude_linux"),
@@ -733,7 +757,8 @@ def _dependency_groups(rows: list[dict]) -> list[dict]:
     )
     groups: list[dict] = []
     for tool, label, windows_copy, linux_copy in specs:
-        sample_name, sample = SAMPLE_CONFIGS[tool]
+        sample_name, _default_sample = SAMPLE_CONFIGS[tool]
+        sample = config_body(stored, tool)
         windows_config, linux_config = CONFIG_DESTINATIONS[tool]
         groups.append(
             {
@@ -760,7 +785,7 @@ def _public_context(request: Request, store: ReleaseStore) -> dict:
     return {
         "releases": store.list_all(),
         "dependency_rows": dependency_rows,
-        "dependencies": _dependency_groups(dependency_rows),
+        "dependencies": _dependency_groups(dependency_rows, stored),
         "sections": _public_sections(request, store),
         "cert_url": certificate_url(intro),
     }
@@ -797,6 +822,7 @@ def _admin_page(
             "notice": notice,
             "error": error,
             "sections": sections_for_edit(app.state.store.copy_map(), drafts),
+            "configs": configs_for_edit(app.state.store.copy_map(), drafts),
             "token_help": TOKEN_HELP,
         },
         status_code=status_code,

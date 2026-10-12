@@ -4,7 +4,7 @@ A small site for the office network. Install is the first page. How to use walks
 
 Yaver reads this site from `RELEASE_HOST` and `RELEASE_PORT` in the install `.env`. From the Yaver folder, run `update.bat` on Windows or `./update.sh` on Ubuntu. The script stops Yaver in that folder, downloads the package for that computer, and replaces the program files. `.env` and the script you ran stay. Start Yaver after the script finishes.
 
-The install page, How to use, Release history, and the Dependencies page are edited from `/admin` after sign-in. Placeholders such as `{windows}` are filled from the address the visitor used.
+The install page, How to use, Release history, and the Dependencies page are edited from `/admin` after sign-in. The same page edits the three sample config files shown on Dependencies (`opencode.json`, `settings.json`, and `config.toml`). Placeholders such as `{windows}` are filled from the address the visitor used. The config files stay as plain text.
 
 ## Run
 

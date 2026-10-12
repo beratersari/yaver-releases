@@ -72,6 +72,14 @@ CONFIG_DESTINATIONS: dict[str, tuple[str, str]] = {
     ),
 }
 
+# Admin form keys for the sample files. Order is the order on /admin.
+# The public page still shows the filename from SAMPLE_CONFIGS.
+CONFIGS: tuple[tuple[str, str, str], ...] = (
+    ("config_opencode", "OpenCode", "opencode.json"),
+    ("config_claude", "Claude Code", "settings.json"),
+    ("config_codex", "Codex", "config.toml"),
+)
+
 SAMPLE_CONFIGS: dict[str, tuple[str, str]] = {
     "opencode": (
         "opencode.json",
@@ -527,6 +535,40 @@ nano codex/config.toml
 
 class CopyError(ValueError):
     """The submitted page text cannot be stored."""
+
+
+def config_body(
+    stored: Mapping[str, str],
+    tool: str,
+    drafts: Mapping[str, str] | None = None,
+) -> str:
+    """Sample file text. A saved row wins. A missing row uses the built-in sample."""
+    key = f"config_{tool}"
+    if drafts is not None and key in drafts:
+        return drafts[key]
+    if key in stored:
+        return stored[key]
+    _filename, body = SAMPLE_CONFIGS[tool]
+    return body
+
+
+def configs_for_edit(
+    stored: Mapping[str, str],
+    drafts: Mapping[str, str] | None = None,
+) -> list[dict[str, object]]:
+    drafts = drafts or {}
+    rows: list[dict[str, object]] = []
+    for key, label, filename in CONFIGS:
+        tool = key.removeprefix("config_")
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "filename": filename,
+                "body": config_body(stored, tool, drafts),
+            }
+        )
+    return rows
 
 
 def sections_for_edit(
