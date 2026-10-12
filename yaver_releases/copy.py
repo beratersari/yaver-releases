@@ -40,6 +40,8 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("use_implement", "3.1 Choose Implement", "How to use"),
     ("use_revise", "3.2 Choose Revise", "How to use"),
     ("use_stop", "3.3 Choose Stop work", "How to use"),
+    ("use_repos", "4. Work in several repositories", "How to use"),
+    ("use_storage", "5. Open Storage and Sessions", "How to use"),
     ("use_intro", "How to use introduction", "How to use"),
     ("use_jira", "Using it from the Jira website", "How to use"),
     ("use_review", "Using it from the GitLab or Azure website", "How to use"),
@@ -248,6 +250,8 @@ Run now starts the job immediately. Schedule waits until the time you pick.
 On a Jira issue or an Azure work item, Mode is plan, build, or test. Choose plan the first time if you want to read the plan before Yaver writes code. Build writes the code. Test writes tests.
 
 A review uses a different form. Choose Existing MR for a GitLab merge request, or Existing PR for an Azure pull request. You can also assign the trigger user as a reviewer on that request. That starts the same review.
+
+To change more than one repository in the same job, follow 4. Work in several repositories.
 """,
     "use_existing_issue": """Use this when the Jira ticket already exists.
 
@@ -338,6 +342,29 @@ When a plan is ready, this page shows Implement and Revise. The next two steps a
 
 Yaver cancels that run and stops the agent. The ticket stays where it is.
 """,
+    "use_repos": """Use this when one ticket should change more than one git repository.
+
+1. Open Settings, then Projects. Save each remote you use. A pasted URL that is not saved can still be used on Scheduled.
+2. Optional: under Repo sets, save a named set. A set needs two or more repositories. You can save up to 20 sets.
+3. Open Scheduled and start a Jira issue, an Azure work item, or a new ticket.
+4. Under Repositories, choose Add repository for each remote, or choose a set under Add projects from a set. Select all adds the repositories shown in that list that are not already chosen.
+5. Set the source and the target for each repository. One repository runs alone. Two or more run together. Each one keeps its own source and target. A source of develop or main becomes `feature/<issue key>` on that repository.
+6. Choose Run now or Schedule.
+
+Yaver keeps one plan for that set of repositories. A later build on the same set implements that plan. Plan, build, and test each keep their own chat for the set. A one-repository job on the first remote starts its own plan and its own chat.
+
+The clones sit in one folder. Open Storage and Sessions to see it. Yaver deletes that folder when every merge request or pull request from the job is merged, completed, or abandoned. Until then the folder stays. The hourly cleanup still removes an unused folder older than Delete unused clones after (days), including while a review is open.
+""",
+    "use_storage": """Open Storage and Sessions on the dashboard.
+
+The page shows the disk the clones use, then the temp clone folders. Open a folder to see the OpenCode chats that use it. Each chat is plan, build, or test, with its branch and session id. A chat for several repositories is marked multi-repo. Claude Code and Codex replies stay on the job Transcript tab.
+
+A folder that a live job is using stays. Stop that job before you delete it. Yaver never deletes a folder a live job is using. Unused folders older than Delete unused clones after (days), under Settings → Runtime → Jobs, are deleted hourly. Set that value to 0 when you want to keep them until you delete them yourself. A folder tied to a review is deleted when that review is merged, completed, or abandoned. A job with several repositories keeps its folder until every review from that job is finished.
+
+Chats whose folder was already deleted stay at the bottom of the page, under Sessions without a folder.
+
+Reset session starts a new chat the next time that same kind of job would have continued the old one. Other chats on that branch stay.
+""",
     "use_intro": (
         "The steps above are the dashboard. Using the dashboard is strongly "
         "recommended. It is easier. You can also use Yaver from the Jira "
@@ -349,7 +376,7 @@ Yaver cancels that run and stops the agent. The ticket stays where it is.
 1. Create the ticket on the board you saved in Settings.
 2. Leave it on To Do.
 3. Assign it to the Jira trigger user.
-4. Put this block in the description. Change the repository and the branches to yours.
+4. Put this block in the description. Change the repository and the branches to yours. To change more than one repository, repeat `Repository`, `Source branch`, and `Target branch` in this same block, once for each remote. Two or more repositories run together. Each one keeps its own branches.
 
 ```
 {params}
@@ -385,7 +412,7 @@ Mode: plan
 """,
     "use_azure": """Use this on the Azure Boards website, on the work item.
 
-1. Put the same `{params}` block on the work item. Use Mode plan the first time.
+1. Put the same `{params}` block on the work item. Use Mode plan the first time. Repeat `Repository`, `Source branch`, and `Target branch` for each repository when the work item should change more than one.
 2. Assign it to the Azure trigger user while the state is To Do or In Progress, or the matching column for that process, such as New, Active, or Doing.
 3. Yaver moves it to the in-progress column, posts the plan, and stops.
 

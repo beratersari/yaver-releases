@@ -92,7 +92,13 @@ def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
     assert page.text.index(">3. Open the job<") < page.text.index(">3.1 Choose Implement<")
     assert page.text.index(">3.1 Choose Implement<") < page.text.index(">3.2 Choose Revise<")
     assert page.text.index(">3.2 Choose Revise<") < page.text.index(">3.3 Choose Stop work<")
-    assert page.text.index(">3.3 Choose Stop work<") < page.text.index(">Using it from external sites<")
+    assert page.text.index(">3.3 Choose Stop work<") < page.text.index(">4. Work in several repositories<")
+    assert page.text.index(">4. Work in several repositories<") < page.text.index(">5. Open Storage and Sessions<")
+    assert page.text.index(">5. Open Storage and Sessions<") < page.text.index(">Using it from external sites<")
+    assert "Add projects from a set" in page.text
+    assert "marked multi-repo" in page.text
+    assert "Sessions without a folder" in page.text
+    assert "Delete unused clones after (days)" in page.text
     assert page.text.index(">Using it from external sites<") < page.text.index(">Using it from the Jira website<")
     assert page.text.index(">Using it from the Jira website<") < page.text.index(">Using it from the GitLab or Azure website<")
     assert page.text.index(">Using it from the GitLab or Azure website<") < page.text.index(">Using it from the Azure Boards website<")
