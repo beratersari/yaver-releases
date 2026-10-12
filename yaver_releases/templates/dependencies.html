@@ -2,6 +2,7 @@
   <p class="need-kicker">Before anything else</p>
   <h2 class="need-title" id="network-certificate-title">Set AI_API_KEY and the network certificate.</h2>
   <p class="need-copy">OpenCode and Codex read <code>AI_API_KEY</code>. Yaver passes that same variable to Claude. Node reads <code>NODE_EXTRA_CA_CERTS</code> to trust the network certificate. Set both system variables on the whole machine before those tools. The certificate address is the external link in the description below. Close every terminal and open a new one, then start Yaver again. On Linux, sign out and sign in so the system environment loads.</p>
+  <p class="warn" role="note"><strong>Warning</strong>: The OpenCode version should be <code>1.18.10</code>.</p>
   <h3>API key</h3>
   <p>Replace <code>YOUR_TOKEN</code> with the key. OpenCode and Codex read this system variable. Yaver passes it to Claude. Do not paste the key into their config files.</p>
   <p>Windows. Run PowerShell as administrator. This command sets the system variable.</p>

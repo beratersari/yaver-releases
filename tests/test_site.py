@@ -184,6 +184,10 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "You must install OpenCode to use Yaver." not in install.text
     assert "Yaver does not run without this." not in install.text
     assert install.text.index("Install the worker selected") < install.text.index('id="windows"')
+    install_need = install.text[:install.text.index('id="windows"')]
+    assert "The OpenCode version should be" in install_need
+    assert "<code>1.18.10</code>" in install_need
+    assert install_need.index('class="warn"') < install_need.index("need-grid")
     assert 'href="/dependencies#opencode"' in install.text
     script = client.get("/static/theme.js")
     assert script.status_code == 200
@@ -275,8 +279,8 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "< /dev/null" not in install.text
     assert "unzip -o /tmp/yaver-22.04.zip" in install.text
     assert "update.bat" in install.text
-    assert install.text.count('class="warn"') == 5
-    assert install.text.count("<strong>Warning</strong>:") == 5
+    assert install.text.count('class="warn"') == 6
+    assert install.text.count("<strong>Warning</strong>:") == 6
     assert "<strong>Warning</strong>." not in install.text
     assert "DASHBOARD_USERNAME" in install.text
     assert "DASHBOARD_PASSWORD" in install.text
@@ -443,7 +447,8 @@ def test_a_cli_zip_is_a_dependency_and_not_a_yaver_update(tmp_path: Path):
     assert "Download 1.18.10" in artifacts
     install = client.get("/install")
     assert ".\\install-opencode.bat" not in install.text
-    assert "1.18.10" not in install.text
+    assert "Download 1.18.10" not in install.text
+    assert 'href="/download/opencode-windows"' not in install.text
     assert "Command-line tool" not in install.text
     assert client.get("/api/latest?platform=windows").status_code == 404
 
@@ -1542,6 +1547,9 @@ def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     text = page.text
     head = text[:text.index('id="opencode"')]
     assert "Before anything else" in head
+    assert "The OpenCode version should be" in head
+    assert "<code>1.18.10</code>" in head
+    assert head.index('class="warn"') < head.index("<h3>API key</h3>")
     assert "NODE_EXTRA_CA_CERTS" in head
     assert "system variable" in head
     assert "external link in the description" in head
@@ -1643,7 +1651,7 @@ def test_opencode_warning_names_the_install_folder(tmp_path: Path):
     assert opencode.index("<strong>Warning</strong>:") < opencode.index("sample-config")
     assert "<strong>Warning</strong>:" not in claude
     assert "<strong>Warning</strong>:" not in text[text.index('id="codex"'):]
-    assert client.get("/install").text.count("<strong>Warning</strong>:") == 5
+    assert client.get("/install").text.count("<strong>Warning</strong>:") == 6
 
 
 def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):
