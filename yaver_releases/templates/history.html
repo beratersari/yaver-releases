@@ -1,10 +1,16 @@
 {% extends "base.html" %}
+{% from "macros.html" import edit_link, copy_view with context %}
 {% block title %}Release history · Yaver{% endblock %}
 {% block body %}
 <p class="kicker">Archive</p>
 <h1>Release history</h1>
 <div class="lede-block">
-  {{ sections.home_intro }}
+  {{ edit_link('home_intro') }}
+  {{ copy_view('home_intro') }}
+</div>
+<div class="lede-block">
+  {{ edit_link('home_update') }}
+  {{ copy_view('home_update') }}
 </div>
 
 {% if history %}

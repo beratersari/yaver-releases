@@ -1,0 +1,49 @@
+{% macro edit_link(key, slot='') -%}
+{% if inplace %}
+<a class="copy-edit" data-copy-key="{{ key }}" href="?edit={{ key }}{% if slot %}&slot={{ slot }}{% endif %}#copy-{{ key }}{% if slot %}-{{ slot }}{% endif %}" aria-label="Edit {{ copy_labels[key] }}" title="{{ copy_labels[key] }}">
+  <svg class="copy-edit-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M9.2 2.6 13.4 6.8 6 14.2H1.8V10L9.2 2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M7.8 4 12 8.2" stroke="currentColor" stroke-width="1.5"/>
+  </svg>
+  <span>Edit</span>
+</a>
+{% endif %}
+{%- endmacro %}
+
+{% macro section_head(title, key, slot='') -%}
+<div class="copy-head">
+  <h3>{{ title }}</h3>
+  {% if not (inplace and edit_key == key and edit_slot == (slot or '')) %}
+  {{ edit_link(key, slot) }}
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro copy_form(key, slot='') -%}
+<form class="copy-form" method="post" action="/admin/copy/one">
+  <label for="field-{{ key }}-{{ slot }}">{{ copy_labels[key] }}</label>
+  {% if edit_error %}
+  <p class="warn" id="copy-error-{{ key }}-{{ slot }}" role="alert">{{ edit_error }}</p>
+  {% endif %}
+  <textarea id="field-{{ key }}-{{ slot }}" name="body" rows="14" spellcheck="false" {% if edit_error %}aria-invalid="true" {% endif %}aria-describedby="{% if edit_error %}copy-error-{{ key }}-{{ slot }} {% endif %}copy-hint-{{ key }}-{{ slot }}">{{ copy_sources[key] | textarea_body }}</textarea>
+  <input type="hidden" name="key" value="{{ key }}">
+  <input type="hidden" name="slot" value="{{ slot }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="next" value="{{ edit_next }}">
+  <div class="copy-actions">
+    <button type="submit">Save</button>
+    <a class="button secondary" href="{{ edit_next }}#copy-{{ key }}{% if slot %}-{{ slot }}{% endif %}">Cancel</a>
+  </div>
+  <p class="quiet" id="copy-hint-{{ key }}-{{ slot }}">Backticks mark a command. A line that is only ``` starts a command block. Names in braces, such as {windows}, stay as download links.</p>
+</form>
+{%- endmacro %}
+
+{% macro copy_view(key, slot='') -%}
+<div class="copy-view-wrap" id="copy-{{ key }}{% if slot %}-{{ slot }}{% endif %}">
+  {% if inplace and edit_key == key and edit_slot == (slot or '') %}
+  {{ copy_form(key, slot) }}
+  {% else %}
+  {{ sections[key] }}
+  {% endif %}
+</div>
+{%- endmacro %}

@@ -1006,3 +1006,87 @@ textarea.sample-config {
   .button,
   .theme { transition: none; }
 }
+
+.fold > summary { flex-wrap: wrap; }
+
+.fold > summary h2,
+.fold > summary h3 { flex: 1 1 auto; }
+
+.copy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1.05rem 0 0.3rem;
+}
+
+.fold-body > .copy-head:first-child { margin-top: 0.85rem; }
+
+.copy-head h3 { margin: 0; flex: 1 1 auto; }
+
+a.copy-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.75rem;
+  min-width: 1.75rem;
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  flex: 0 0 auto;
+}
+
+a.copy-edit:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+body.inplace .lede-block {
+  position: relative;
+  padding-right: 5.75rem;
+}
+
+body.inplace .lede-block > a.copy-edit {
+  position: absolute;
+  top: 0.15rem;
+  right: 0;
+}
+
+.copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.copy-actions button,
+.copy-actions a.button { margin-top: 0; }
+
+.admin-bar {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  background: var(--accent-muted);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.sample-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.sample-actions button,
+.sample-actions a.copy-edit { margin-top: 0; }

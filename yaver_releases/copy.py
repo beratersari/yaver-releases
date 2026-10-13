@@ -603,12 +603,49 @@ def sections_for_edit(
     return rows
 
 
+def copy_catalog() -> dict[str, str]:
+    """Labels for the in-place editor. Config rows name the sample file."""
+    labels = {key: label for key, label, _page in SECTIONS}
+    for key, label, filename in CONFIGS:
+        labels[key] = f"{label} sample {filename}"
+    return labels
+
+
+def known_copy_key(key: str) -> bool:
+    return key in copy_catalog()
+
+
+def source_map(
+    stored: Mapping[str, str],
+    drafts: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Raw text for one editor. A draft wins, then a saved row, then the built-in text."""
+    pending = drafts or {}
+    sources: dict[str, str] = {}
+    for key, _label, _page in SECTIONS:
+        if key in pending:
+            sources[key] = pending[key]
+        elif key in stored:
+            sources[key] = stored[key]
+        else:
+            sources[key] = DEFAULTS[key]
+    for key, _label, _filename in CONFIGS:
+        sources[key] = config_body(stored, key.removeprefix("config_"), pending)
+    return sources
+
+
 def public_html(stored: Mapping[str, str], tokens: Mapping[str, str]) -> dict[str, Markup]:
     rendered: dict[str, Markup] = {}
     for key, _label, _page in SECTIONS:
         raw = stored[key] if key in stored else DEFAULTS[key]
         rendered[key] = render_copy(fill(raw, tokens))
     return rendered
+
+
+def textarea_body(value: object) -> Markup:
+    """Text for a textarea. ``<`` cannot close the tag. Quotes stay as typed."""
+    text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return Markup(text)
 
 
 def clean_body(value: str) -> str:

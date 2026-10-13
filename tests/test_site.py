@@ -1855,6 +1855,168 @@ def test_static_types_survive_a_plain_text_windows_map(tmp_path: Path):
     assert js.headers["x-content-type-options"] == "nosniff"
 
 
+def _admin_browser(tmp_path: Path, *, client_host: str = "127.0.0.1") -> TestClient:
+    """Browser on admin.localhost. Loopback is this computer."""
+    app = create_app(
+        data_dir=tmp_path / "data",
+        admin_user="admin",
+        admin_password="correct-horse",
+        secret="test-secret",
+    )
+    return TestClient(
+        app,
+        base_url="http://admin.localhost:8090",
+        client=(client_host, 8090),
+    )
+
+
+def test_public_pages_do_not_show_edit_icons(tmp_path: Path):
+    client = _client(tmp_path)
+    for path in ("/install", "/how-to", "/releases", "/dependencies"):
+        page = client.get(path)
+        assert page.status_code == 200
+        assert "copy-edit" not in page.text
+        assert 'action="/admin/copy/one"' not in page.text
+
+
+def test_admin_localhost_from_another_computer_is_not_signed_in(tmp_path: Path):
+    client = _admin_browser(tmp_path, client_host="10.1.2.3")
+    page = client.get("/how-to")
+    assert page.status_code == 200
+    assert "copy-edit" not in page.text
+    assert "yaver_release_session" not in page.headers.get("set-cookie", "")
+
+
+def test_admin_localhost_edits_the_block_on_the_page(tmp_path: Path):
+    client = _admin_browser(tmp_path)
+    page = client.get("/how-to")
+    assert page.status_code == 200
+    assert 'data-copy-key="use_settings"' in page.text
+    assert 'aria-label="Edit 1. Save Settings"' in page.text
+    assert "Signed in on admin.localhost." in page.text
+    assert 'href="/admin"' in page.text
+    assert 'href="/admin/analytics"' in page.text
+    opened = client.get("/how-to?edit=use_settings")
+    assert "<textarea" in opened.text
+    assert "Enter the Jira trigger user." in opened.text
+    token = _csrf(opened.text)
+    saved = client.post(
+        "/admin/copy/one",
+        data={
+            "key": "use_settings",
+            "body": "Office settings line.\n\n<script>alert(1)</script>",
+            "csrf": token,
+            "next": "/how-to",
+            "slot": "",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/how-to#copy-use_settings"
+    shown = client.get("/how-to")
+    assert "Office settings line." in shown.text
+    assert "<script>alert" not in shown.text
+    assert "&lt;script&gt;" in shown.text
+    install = client.get("/install")
+    assert "Open this page from the address" in install.text
+    assert "Office settings line." not in install.text
+
+
+def test_admin_localhost_save_rejects_a_foreign_return_and_unknown_block(tmp_path: Path):
+    client = _admin_browser(tmp_path)
+    opened = client.get("/install?edit=install_intro")
+    token = _csrf(opened.text)
+    bounced = client.post(
+        "/admin/copy/one",
+        data={
+            "key": "install_intro",
+            "body": "Kept on this site.",
+            "csrf": token,
+            "next": "https://evil.example/phish",
+            "slot": "",
+        },
+        follow_redirects=False,
+    )
+    assert bounced.status_code == 303
+    assert bounced.headers["location"].startswith("/install#")
+    assert "evil.example" not in bounced.headers["location"]
+    denied = client.post(
+        "/admin/copy/one",
+        data={"key": "../secret", "body": "nope", "csrf": token, "next": "/install"},
+        follow_redirects=False,
+    )
+    assert denied.status_code == 400
+    outsider = _client(tmp_path)
+    _sign_in(outsider)
+    token = _csrf(outsider.get("/admin").text)
+    blocked = outsider.post(
+        "/admin/copy/one",
+        data={"key": "install_intro", "body": "from the public host", "csrf": token, "next": "/install"},
+    )
+    assert blocked.status_code == 403
+
+
+def test_admin_localhost_edits_one_sample_config(tmp_path: Path):
+    client = _admin_browser(tmp_path)
+    page = client.get("/dependencies")
+    assert 'data-copy-key="config_opencode"' in page.text
+    assert 'aria-label="Edit OpenCode sample opencode.json"' in page.text
+    opened = client.get("/dependencies?edit=config_opencode")
+    assert '"apiKey": "{env:AI_API_KEY}"' in opened.text
+    token = _csrf(opened.text)
+    saved = client.post(
+        "/admin/copy/one",
+        data={
+            "key": "config_opencode",
+            "body": '{\n  "model": "office/model"\n}\n',
+            "csrf": token,
+            "next": "/dependencies",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"].startswith("/dependencies#")
+    body = client.get("/dependencies").text
+    assert '"model": "office/model"' in body
+    assert "Open this page from the address" in client.get("/install").text
+
+
+def _summary(html: str, details_id: str) -> str:
+    start = html.index(f'id="{details_id}"')
+    summary_at = html.index("<summary>", start)
+    return html[summary_at:html.index("</summary>", summary_at)]
+
+
+def test_admin_fold_puts_one_edit_on_each_section(tmp_path: Path):
+    """A fold title shows the heading only. Each copy block keeps its own Edit."""
+    client = _admin_browser(tmp_path)
+    install = client.get("/install").text
+    assert "copy-edit" not in _summary(install, "windows")
+    windows = install[install.index('id="windows"'):install.index('id="ubuntu-18.04"')]
+    assert windows.index("<h3>Install</h3>") < windows.index('data-copy-key="windows"')
+    assert windows.index('data-copy-key="windows"') < windows.index("<h3>Update</h3>")
+    assert windows.index("<h3>Update</h3>") < windows.index('data-copy-key="windows_update"')
+    ubuntu = install[install.index('id="ubuntu-22.04"'):install.index('id="ubuntu-24.04"')]
+    assert "copy-edit" not in _summary(ubuntu, "ubuntu-22.04")
+    assert ubuntu.index("<h3>Install</h3>") < ubuntu.index('data-copy-key="ubuntu22"')
+    assert ubuntu.index("<h3>Update</h3>") < ubuntu.index('data-copy-key="ubuntu_update"')
+    assert "slot=ubuntu-22.04" in ubuntu
+    tools = client.get("/dependencies").text
+    opencode = tools[tools.index('id="opencode"'):tools.index('id="claude"')]
+    assert "copy-edit" not in _summary(opencode, "opencode")
+    assert opencode.index("<h3>Windows</h3>") < opencode.index('data-copy-key="opencode_windows"')
+    assert opencode.index('data-copy-key="opencode_windows"') < opencode.index("<h3>Linux</h3>")
+    assert opencode.index("<h3>Linux</h3>") < opencode.index('data-copy-key="opencode_linux"')
+
+
+def test_admin_localhost_without_a_password_stays_public(tmp_path: Path):
+    app = create_app(data_dir=tmp_path / "data", admin_user="", admin_password="", secret="test-secret")
+    client = TestClient(app, base_url="http://admin.localhost:8090", client=("127.0.0.1", 8090))
+    page = client.get("/install")
+    assert page.status_code == 200
+    assert "copy-edit" not in page.text
+
+
 def test_edge_keeps_the_night_and_light_switch(tmp_path: Path):
     """Edge drops the "only" keyword from the colorScheme property and then
     repaints the page with its own colors. The served page has to opt out

@@ -1,3 +1,4 @@
+{% from "macros.html" import edit_link, section_head, copy_view, copy_form with context %}
 <section class="need" id="network-certificate" aria-labelledby="network-certificate-title">
   <p class="need-kicker">Before anything else</p>
   <h2 class="need-title" id="network-certificate-title">Set AI_API_KEY and the network certificate.</h2>
@@ -18,27 +19,39 @@
 </section>
 
 <div class="lede-block" id="deps-intro">
-  {{ sections.deps_intro }}
+  {{ edit_link('deps_intro') }}
+  {{ copy_view('deps_intro') }}
 </div>
 
 <div class="folds">
   {% for item in dependencies %}
+  {% set config_key = 'config_' ~ item.id %}
+  {% set editing_config = inplace and edit_key == config_key and edit_slot == '' %}
   <details class="fold" id="{{ item.id }}">
     <summary><h2>{{ item.label }}</h2></summary>
     <div class="fold-body">
-      <h3>Windows</h3>
-      {{ sections[item.windows_copy] }}
-      <h3>Linux</h3>
-      {{ sections[item.linux_copy] }}
+      {{ section_head('Windows', item.windows_copy) }}
+      {{ copy_view(item.windows_copy) }}
+      {{ section_head('Linux', item.linux_copy) }}
+      {{ copy_view(item.linux_copy) }}
       {% if item.id == "opencode" %}
       <p class="warn" role="note"><strong>Warning</strong>: The installer writes <code>opencode.json</code> and the CLI under the user's <code>.opencode</code> folder. On Windows that folder is <code>%USERPROFILE%\.opencode</code>. On Linux it is <code>~/.opencode</code>. Settings Sync also copies agents into <code>%USERPROFILE%\.opencode\agents</code> and <code>%USERPROFILE%\.config\opencode\agents</code> on Windows, and into <code>~/.opencode/agents</code> and <code>~/.config/opencode/agents</code> on Linux. Leave those folders in place.</p>
       {% endif %}
-      <div class="sample">
+      <div class="sample" id="copy-{{ config_key }}">
         <div class="sample-bar">
-          <label for="sample-{{ item.id }}">Sample config <span class="sample-file">{{ item.sample_name }}</span><span class="sample-dest"><span class="sample-os">Windows</span> <code>{{ item.windows_config }}</code></span><span class="sample-dest"><span class="sample-os">Linux</span> <code>{{ item.linux_config }}</code></span></label>
-          <button type="button" class="secondary sample-copy" data-copy-target="sample-{{ item.id }}">Copy</button>
+          <label for="{% if editing_config %}field-{{ config_key }}-{% else %}sample-{{ item.id }}{% endif %}">Sample config <span class="sample-file">{{ item.sample_name }}</span><span class="sample-dest"><span class="sample-os">Windows</span> <code>{{ item.windows_config }}</code></span><span class="sample-dest"><span class="sample-os">Linux</span> <code>{{ item.linux_config }}</code></span></label>
+          <div class="sample-actions">
+            {{ edit_link(config_key) }}
+            {% if not editing_config %}
+            <button type="button" class="secondary sample-copy" data-copy-target="sample-{{ item.id }}">Copy</button>
+            {% endif %}
+          </div>
         </div>
-        <textarea id="sample-{{ item.id }}" class="sample-config" readonly spellcheck="false" rows="{{ item.sample_rows }}">{{ item.sample }}</textarea>
+        {% if editing_config %}
+        {{ copy_form(config_key) }}
+        {% else %}
+        <textarea id="sample-{{ item.id }}" class="sample-config" readonly spellcheck="false" rows="{{ item.sample_rows }}">{{ item.sample | textarea_body }}</textarea>
+        {% endif %}
       </div>
     </div>
   </details>

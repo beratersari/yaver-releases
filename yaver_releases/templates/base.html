@@ -27,7 +27,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/site.css">
 </head>
-<body>
+<body{% if inplace %} class="inplace"{% endif %}>
   {% set path = request.url.path %}
   <div class="app">
     <aside class="side">
@@ -76,10 +76,35 @@
     </aside>
     <main>
       <div class="page">
+        {% if inplace %}
+        <p class="admin-bar" role="status">Signed in on admin.localhost. Each Edit button changes that block. <a href="/admin">Upload a package</a>.</p>
+        {% endif %}
         {% block body %}{% endblock %}
       </div>
     </main>
   </div>
   <script src="/static/theme.js"></script>
+  {% if inplace %}
+  <script>
+    (function () {
+      function openTo(node) {
+        var parent = node;
+        while (parent) {
+          if (parent.tagName === "DETAILS") parent.open = true;
+          parent = parent.parentElement;
+        }
+      }
+      var form = document.querySelector(".copy-form");
+      if (form) {
+        openTo(form);
+        var area = form.querySelector("textarea");
+        if (area) area.focus();
+      } else if (location.hash) {
+        var target = document.getElementById(location.hash.slice(1));
+        if (target) openTo(target);
+      }
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

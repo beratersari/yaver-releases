@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import edit_link, section_head, copy_view with context %}
 {% block title %}Install Yaver{% endblock %}
 {% block body %}
 <section class="need" aria-label="Workers">
@@ -29,24 +30,26 @@
 <h1>Install Yaver</h1>
 <p>When the dashboard is open, <a href="/how-to">How to use</a> walks through a plan, a build, and a review.</p>
 <div class="lede-block">
-  {{ sections.install_intro }}
+  {{ edit_link('install_intro') }}
+  {{ copy_view('install_intro') }}
 </div>
 
 <div class="folds">
   <details class="fold" id="windows">
     <summary><h2>Windows</h2></summary>
     <div class="fold-body">
-      <h3>Install</h3>
+      {{ section_head('Install', 'windows') }}
       <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
-      {{ sections.windows }}
-      <h3>Update</h3>
-      {{ sections.windows_update }}
+      {{ copy_view('windows') }}
+      {{ section_head('Update', 'windows_update') }}
+      {{ copy_view('windows_update') }}
     </div>
   </details>
 </div>
 
 <div class="lede-block">
-  {{ sections.ubuntu_intro }}
+  {{ edit_link('ubuntu_intro') }}
+  {{ copy_view('ubuntu_intro') }}
 </div>
 
 <div class="folds">
@@ -59,11 +62,11 @@
   <details class="fold" id="{{ item[0] }}">
     <summary><h2>{{ item[1] }}</h2></summary>
     <div class="fold-body">
-      <h3>Install</h3>
+      {{ section_head('Install', item[2]) }}
       <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
-      {{ sections[item[2]] }}
-      <h3>Update</h3>
-      {{ sections.ubuntu_update }}
+      {{ copy_view(item[2]) }}
+      {{ section_head('Update', 'ubuntu_update', item[0]) }}
+      {{ copy_view('ubuntu_update', item[0]) }}
     </div>
   </details>
   {% endfor %}
