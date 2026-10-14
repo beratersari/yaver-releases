@@ -1927,6 +1927,68 @@ def test_public_pages_do_not_show_edit_icons(tmp_path: Path):
         assert 'action="/admin/copy/one"' not in page.text
 
 
+def test_office_name_sign_in_edits_pages(tmp_path: Path):
+    """The network name already reaches this PC. The admin. prefix is another name."""
+    app = create_app(
+        data_dir=tmp_path / "data",
+        admin_user="admin",
+        admin_password="correct-horse",
+        secret="test-secret",
+    )
+    office = TestClient(app, base_url="http://vdi-07.company.com:8090", client=("10.1.2.3", 8090))
+    public = office.get("/install")
+    assert public.status_code == 200
+    assert "copy-edit" not in public.text
+    assert 'href="/admin"' not in public.text
+    _sign_in(office)
+    page = office.get("/how-to")
+    assert 'data-copy-key="use_settings"' in page.text
+    assert "Signed in on vdi-07.company.com." in page.text
+    token = _csrf(office.get("/how-to?edit=use_settings").text)
+    saved = office.post(
+        "/admin/copy/one",
+        data={
+            "key": "use_settings",
+            "body": "Edited from the office name.",
+            "csrf": token,
+            "next": "/how-to",
+            "slot": "",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/how-to#copy-use_settings"
+    assert "Edited from the office name." in office.get("/how-to").text
+
+    prefixed = TestClient(
+        app,
+        base_url="http://admin.vdi-07.company.com:8090",
+        client=("10.1.2.3", 8090),
+    )
+    bare = prefixed.get("/install")
+    assert "copy-edit" not in bare.text
+    assert "yaver_release_session" not in bare.headers.get("set-cookie", "")
+    local_prefix = TestClient(
+        app,
+        base_url="http://admin.vdi-07.company.com:8090",
+        client=("127.0.0.1", 8090),
+    )
+    local = local_prefix.get("/install")
+    assert "copy-edit" not in local.text
+    assert "yaver_release_session" not in local.headers.get("set-cookie", "")
+    login = prefixed.get("/admin/login")
+    signed = prefixed.post(
+        "/admin/login",
+        data={"username": "admin", "password": "correct-horse", "csrf": _csrf(login.text)},
+        follow_redirects=False,
+    )
+    assert signed.status_code == 303
+    assert signed.headers["location"] == "/install"
+    edited = prefixed.get("/install")
+    assert 'data-copy-key="install_intro"' in edited.text
+    assert "Signed in on admin.vdi-07.company.com." in edited.text
+
+
 def test_admin_localhost_from_another_computer_is_not_signed_in(tmp_path: Path):
     client = _admin_browser(tmp_path, client_host="10.1.2.3")
     page = client.get("/how-to")
@@ -1995,8 +2057,6 @@ def test_admin_localhost_save_rejects_a_foreign_return_and_unknown_block(tmp_pat
     )
     assert denied.status_code == 400
     outsider = _client(tmp_path)
-    _sign_in(outsider)
-    token = _csrf(outsider.get("/admin").text)
     blocked = outsider.post(
         "/admin/copy/one",
         data={"key": "install_intro", "body": "from the public host", "csrf": token, "next": "/install"},

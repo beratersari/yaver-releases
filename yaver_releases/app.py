@@ -73,7 +73,7 @@ _ROOT = Path(__file__).resolve().parent
 
 
 def _template_context(request: Request) -> dict[str, bool]:
-    """Analytics is on the admin pages, and on every page opened at admin.localhost."""
+    """Analytics stays on the publish pages. The admin host also shows it beside Edit."""
     inplace = bool(getattr(request.state, "inplace", False))
     app = request.app
     secret = getattr(app.state, "secret", "")
@@ -88,7 +88,7 @@ def _template_context(request: Request) -> dict[str, bool]:
     path = (request.url.path or "/").rstrip("/") or "/"
     on_admin = path == "/admin" or path.startswith("/admin/analytics")
     return {
-        "show_analytics_nav": bool((signed and on_admin) or inplace),
+        "show_analytics_nav": bool((signed and on_admin) or (inplace and _admin_host(request))),
         "inplace": inplace,
     }
 
@@ -109,9 +109,21 @@ _TEMPLATE_FOR_PAGE = {
 _SLOT = re.compile(r"^[A-Za-z0-9._-]{0,80}$")
 
 
+def _request_host(request: Request) -> str:
+    return (request.url.hostname or "").strip().rstrip(".").lower()
+
+
 def _admin_host(request: Request) -> bool:
-    name = (request.url.hostname or "").strip().rstrip(".").lower()
-    return name == "admin.localhost"
+    """admin.localhost, or admin. in front of a network name such as vdi-07.company.com."""
+    name = _request_host(request)
+    if name == "admin.localhost":
+        return True
+    if not name.startswith("admin."):
+        return False
+    rest = name[len("admin.") :]
+    if not rest or ".." in rest:
+        return False
+    return all(part and part.replace("-", "").isalnum() for part in rest.split("."))
 
 
 def _loopback(request: Request) -> bool:
@@ -258,28 +270,29 @@ def create_app(
     @app.middleware("http")
     async def _headers(request: Request, call_next):
         # admin.localhost signs in by itself only when the connection is from
-        # this computer. The session is ready before the page is rendered.
+        # this computer. A password sign-in on the network name edits there too.
+        # The session is ready before the page is rendered.
         request.state.admin_session = None
         request.state.inplace = False
         request.state.issue_session = ""
-        if _admin_host(request):
-            current = read_session(app.state.secret, request.cookies.get(COOKIE) or "")
-            if (
-                current is None
-                and _loopback(request)
-                and app.state.admin_user
-                and app.state.admin_password
-            ):
-                csrf = new_csrf()
-                request.state.issue_session = sign_session(
-                    app.state.secret,
-                    user=app.state.admin_user,
-                    csrf=csrf,
-                )
-                current = {"user": app.state.admin_user, "csrf": csrf, "kind": "admin"}
-            if current is not None:
-                request.state.admin_session = current
-                request.state.inplace = True
+        current = read_session(app.state.secret, request.cookies.get(COOKIE) or "")
+        if (
+            current is None
+            and _request_host(request) == "admin.localhost"
+            and _loopback(request)
+            and app.state.admin_user
+            and app.state.admin_password
+        ):
+            csrf = new_csrf()
+            request.state.issue_session = sign_session(
+                app.state.secret,
+                user=app.state.admin_user,
+                csrf=csrf,
+            )
+            current = {"user": app.state.admin_user, "csrf": csrf, "kind": "admin"}
+        if current is not None:
+            request.state.admin_session = current
+            request.state.inplace = True
         response = await call_next(request)
         if request.state.issue_session and not _sets_session_cookie(response):
             response.set_cookie(
@@ -574,8 +587,6 @@ def create_app(
         slot: str = Form(""),
         return_to: str = Form("", alias="next"),
     ):
-        if not _admin_host(request):
-            raise HTTPException(status_code=403, detail="Sign in again.")
         _require_admin(request, app, csrf)
         copy_key = (key or "").strip()
         if not known_copy_key(copy_key):

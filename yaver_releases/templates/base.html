@@ -77,7 +77,7 @@
     <main>
       <div class="page">
         {% if inplace %}
-        <p class="admin-bar" role="status">Signed in on admin.localhost. Each Edit button changes that block. <a href="/admin">Upload a package</a>.</p>
+        <p class="admin-bar" role="status">Signed in{% if request.url.hostname %} on {{ request.url.hostname }}{% endif %}. Each Edit button changes that block. <a href="/admin">Upload a package</a>.</p>
         {% endif %}
         {% block body %}{% endblock %}
       </div>
