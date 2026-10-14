@@ -158,8 +158,6 @@ unzip -o /tmp/yaver-{version}.zip -d "$HOME/yaver"
 cd "$HOME/yaver"
 chmod 755 yaver install-agents.sh
 ./install-agents.sh
-if [ ! -f .env ]; then cp .env.example .env; fi
-nano .env
 sudo ufw allow 8080
 setsid nohup ./yaver start > yaver.log 2>&1 < /dev/null &
 ```
@@ -194,7 +192,7 @@ DEFAULTS: dict[str, str] = {
         "the commands. Everyone installs the executable. The commands "
         "download that zip, unpack it, and start Yaver."
     ),
-    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, `.env.example`, `install-agents.bat`, and `update.bat`. Keep `yaver.exe` and `_internal` in the same folder. Edit `.env` before the first real run and set the Jira host, token, and board id.
+    "windows": """The zip contains `yaver.exe`, a folder named `_internal`, `.env`, `install-agents.bat`, and `update.bat`. `.env` is already in that folder. Keep `yaver.exe` and `_internal` in the same folder.
 
 PowerShell:
 
@@ -204,8 +202,6 @@ New-Item -ItemType Directory -Force -Path yaver | Out-Null
 tar.exe -xf yaver-windows.zip -C yaver
 cd yaver
 .\\install-agents.bat
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-notepad .env
 .\\yaver.exe
 ```
 
@@ -220,10 +216,7 @@ update.bat
         "Open the version that matches the computer. An executable built on "
         "Ubuntu 24.04 does not start on 22.04 or older. Check with "
         "`lsb_release -rs`. These commands use `unzip`. If it is missing, "
-        "run `sudo apt-get install -y unzip` once. Edit `.env` before the "
-        "first real run and set the Jira host, token, and board id. "
-        "`nano .env` opens that file. If nano is missing, run "
-        "`sudo apt-get install -y nano` once. Run Yaver as the account "
+        "run `sudo apt-get install -y unzip` once. Run Yaver as the account "
         "that should own the work. Do not use root. The log is `yaver.log` "
         "in that folder. The commands allow TCP and UDP port 8080 in ufw. Open "
         "`http://<ip>:8080` on that machine."

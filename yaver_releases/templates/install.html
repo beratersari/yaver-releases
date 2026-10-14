@@ -39,7 +39,6 @@
     <summary><h2>Windows</h2></summary>
     <div class="fold-body">
       {{ section_head('Install', 'windows') }}
-      <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
       {{ copy_view('windows') }}
       {{ section_head('Update', 'windows_update') }}
       {{ copy_view('windows_update') }}
@@ -63,7 +62,6 @@
     <summary><h2>{{ item[1] }}</h2></summary>
     <div class="fold-body">
       {{ section_head('Install', item[2]) }}
-      <p class="warn" role="note"><strong>Warning</strong>: Please change the dashboard username and password in <code>.env</code> for security reasons. Set <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code>.</p>
       {{ copy_view(item[2]) }}
       {{ section_head('Update', 'ubuntu_update', item[0]) }}
       {{ copy_view('ubuntu_update', item[0]) }}

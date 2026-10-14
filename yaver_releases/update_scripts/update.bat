@@ -98,7 +98,7 @@ try {
     }
     $envFile = Join-Path $root '.env'
     if (-not (Test-Path -LiteralPath $envFile)) {
-        throw '.env is missing. Copy .env.example to .env and set RELEASE_HOST and RELEASE_PORT.'
+        throw '.env is missing. Set RELEASE_HOST and RELEASE_PORT in .env in this folder.'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $root 'yaver.exe')) -or -not (Test-Path -LiteralPath (Join-Path $root '_internal'))) {
         throw 'This folder is not a Yaver executable install.'

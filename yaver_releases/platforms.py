@@ -331,6 +331,7 @@ def version_in_filename(filename: str) -> str | None:
 
 
 _NOTE_NAME = "RELEASE_NOTES.txt"
+_ENV_NAME = ".env"
 _MAX_NOTE_BYTES = 64 * 1024
 _MAX_NOTE_CHARS = 32_000
 
@@ -338,7 +339,8 @@ _MAX_NOTE_CHARS = 32_000
 def is_executable_bundle(path: Path) -> bool:
     """True when the zip holds versioned Yaver packages and an optional note.
 
-    ``RELEASE_NOTES.txt`` is the only file that is not itself a zip.
+    ``RELEASE_NOTES.txt`` and one root ``.env`` are the files that are not
+    themselves zips. ``.env`` is the example environment file.
     """
     if not zipfile.is_zipfile(path):
         return False
@@ -354,15 +356,19 @@ def is_executable_bundle(path: Path) -> bool:
         return False
     zips = 0
     notes = 0
+    envs = 0
     for name in names:
         if name == _NOTE_NAME:
             notes += 1
+            continue
+        if name == _ENV_NAME:
+            envs += 1
             continue
         if name.lower().endswith(".zip"):
             zips += 1
             continue
         return False
-    return zips > 0 and notes <= 1
+    return zips > 0 and notes <= 1 and envs <= 1
 
 
 def _release_note_text(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> str:
@@ -404,7 +410,7 @@ def split_executable_bundle(
     Each returned path is a generated file name. The third item is the
     zip name from the upload, which is the name colleagues download.
     The second value is the text of ``RELEASE_NOTES.txt``, or ``""`` when
-    that file is absent.
+    that file is absent. A root ``.env`` is skipped and is not published.
     """
     if not zipfile.is_zipfile(path):
         raise PackageError("The file is not a zip.")
@@ -412,6 +418,7 @@ def split_executable_bundle(
     seen: dict[str, str] = {}
     note = ""
     note_seen = False
+    env_seen = False
     try:
         archive = zipfile.ZipFile(path)
     except zipfile.BadZipFile as exc:
@@ -440,6 +447,11 @@ def split_executable_bundle(
                     raise PackageError("The zip contains more than one release note.")
                 note_seen = True
                 note = _release_note_text(archive, info)
+                continue
+            if base == _ENV_NAME:
+                if env_seen:
+                    raise PackageError("The zip contains more than one .env.")
+                env_seen = True
                 continue
             if not base.lower().endswith(".zip"):
                 raise PackageError(

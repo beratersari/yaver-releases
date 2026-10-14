@@ -246,8 +246,8 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert install.text.count("<h3>Install</h3>") == 5
     assert install.text.count("<h3>Update</h3>") == 5
     assert install.text.count("setsid nohup ./yaver start") == 4
-    assert install.text.count("nano .env") == 5
-    assert "notepad .env" in install.text
+    assert "nano .env" not in install.text
+    assert "notepad .env" not in install.text
     assert install.text.count("<code>http://&lt;ip&gt;:8080</code>") == 2
     assert "127.0.0.1:8080" not in install.text
     assert ".\\install-agents.bat" in install.text
@@ -261,16 +261,17 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert windows_at < windows_update < ubuntu18 < ubuntu22 < ubuntu24
     ubuntu22_block = install.text[ubuntu22:ubuntu24]
     assert "unzip -o /tmp/yaver-22.04.zip" in ubuntu22_block
-    assert "nano .env" in ubuntu22_block
+    assert "nano .env" not in ubuntu22_block
     assert "./install-agents.sh" in ubuntu22_block
     assert "sudo ufw allow 8080" in ubuntu22_block
     assert "8080/tcp" not in ubuntu22_block
     assert "8080/udp" not in ubuntu22_block
     assert install.text.count("sudo ufw allow 8080") == 4
-    assert ubuntu22_block.index("./install-agents.sh") < ubuntu22_block.index("nano .env")
-    assert ubuntu22_block.index("nano .env") < ubuntu22_block.index("sudo ufw allow 8080")
+    assert ubuntu22_block.index("./install-agents.sh") < ubuntu22_block.index("sudo ufw allow 8080")
+    assert "cp .env.example .env" not in install.text
     windows_block = install.text[windows_at:ubuntu18]
-    assert windows_block.index("install-agents.bat") < windows_block.index("notepad .env")
+    assert windows_block.index("install-agents.bat") < windows_block.index(".\\yaver.exe")
+    assert "notepad .env" not in windows_block
     assert "./update.sh" in ubuntu22_block
     assert "yaver-18.04.zip" not in ubuntu22_block
     assert "Start again later" not in install.text
@@ -279,17 +280,12 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "< /dev/null" not in install.text
     assert "unzip -o /tmp/yaver-22.04.zip" in install.text
     assert "update.bat" in install.text
-    assert install.text.count('class="warn"') == 6
-    assert install.text.count("<strong>Warning</strong>:") == 6
+    assert install.text.count('class="warn"') == 1
+    assert install.text.count("<strong>Warning</strong>:") == 1
     assert "<strong>Warning</strong>." not in install.text
-    assert "DASHBOARD_USERNAME" in install.text
-    assert "DASHBOARD_PASSWORD" in install.text
-    windows_warn = install.text.index('class="warn"', windows_at)
-    windows_command = install.text.index("curl.exe", windows_at)
-    assert windows_at < windows_warn < windows_command
-    ubuntu_warn = install.text.index('class="warn"', ubuntu22)
-    ubuntu_command = install.text.index("mkdir -p", ubuntu22)
-    assert ubuntu22 < ubuntu_warn < ubuntu_command
+    assert "DASHBOARD_USERNAME" not in install.text
+    assert "DASHBOARD_PASSWORD" not in install.text
+    assert "Please change the dashboard username" not in install.text
     assert "Start yaver.exe after the script prints Updated to." not in install.text
     assert "If update.bat is not in the folder yet" not in install.text
     assert "prints Updated to" not in install.text
@@ -299,7 +295,8 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "yaver update" not in install.text
     assert "--host" not in install.text
     assert "--port" not in install.text
-    assert "Copy-Item .env.example .env" in install.text
+    assert "Copy-Item .env.example .env" not in install.text
+    assert "<code>.env</code>" in windows_block
     assert "Update from Settings" not in home.text
     assert "update.bat" in home.text
     assert "update.sh" in home.text
@@ -1311,6 +1308,57 @@ def test_bundle_upload_rejects_an_extra_file_a_bad_outer_name_and_a_parent_path(
     assert list((tmp_path / "data" / "files").glob("*.zip")) == []
 
 
+def test_bundle_upload_keeps_one_root_env_and_does_not_publish_it(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    marker = "JIRA_HOST=https://bundle-env.example"
+    accepted = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                _executable_bundle(
+                    extra={
+                        ".env": (marker + "\n").encode("utf-8"),
+                        "RELEASE_NOTES.txt": b"# Yaver 0.9.79\n\nOffice note.\n",
+                    }
+                ),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert accepted.status_code == 303
+    assert client.get("/api/latest?platform=windows").json()["version"] == "0.9.79"
+    page = client.get("/releases").text
+    assert "Office note." in page
+    assert marker not in page
+    assert 'href="/download/windows/0.9.79"' in page
+
+    token = _csrf(client.get("/admin").text)
+    doubled = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(_executable_bundle(extra={".env": b"A=1\n"}))) as src:
+        with zipfile.ZipFile(doubled, "w") as dst:
+            for info in src.infolist():
+                dst.writestr(info, src.read(info.filename))
+            dst.writestr(".env", b"B=2\n")
+    rejected = client.post(
+        "/admin/upload",
+        data={"kind": "bundle", "csrf": token},
+        files={
+            "package": (
+                "yaver-executables-0.9.79.zip",
+                doubled.getvalue(),
+                "application/zip",
+            )
+        },
+    )
+    assert rejected.status_code == 400
+    assert "more than one .env" in rejected.text
+
+
 def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     client = _client(tmp_path)
     assert client.get("/api/admin/installations").status_code == 403
@@ -1651,7 +1699,7 @@ def test_opencode_warning_names_the_install_folder(tmp_path: Path):
     assert opencode.index("<strong>Warning</strong>:") < opencode.index("sample-config")
     assert "<strong>Warning</strong>:" not in claude
     assert "<strong>Warning</strong>:" not in text[text.index('id="codex"'):]
-    assert client.get("/install").text.count("<strong>Warning</strong>:") == 6
+    assert client.get("/install").text.count("<strong>Warning</strong>:") == 1
 
 
 def test_each_dependency_has_a_sample_config_to_copy(tmp_path: Path):

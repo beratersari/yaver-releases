@@ -52,8 +52,9 @@ Publish one Yaver zip. The files inside it are:
 | `yaver-linux-x64-ubuntu-22.04-0.9.79.zip` | Ubuntu 22.04 |
 | `yaver-linux-x64-ubuntu-24.04-0.9.79.zip` | Ubuntu 24.04 |
 | `RELEASE_NOTES.txt` | Release history, under that version |
+| `.env` | Kept with the upload. It is not a download. |
 
-The version in this example is `0.9.79`. Use the version that is in the file names. The form has no version field. A name such as `yaver-executables-0.9.79.zip` has to use that same version. All five zip files are required, and they have to share one version. `RELEASE_NOTES.txt` is optional. When it is present, its text is the release note and the notes box on the form is ignored. Release history shows that version as one collapsible section, with the note above the downloads. Each zip inside it stays its own download. The previous version stays in the history.
+The version in this example is `0.9.79`. Use the version that is in the file names. The form has no version field. A name such as `yaver-executables-0.9.79.zip` has to use that same version. All five zip files are required, and they have to share one version. `RELEASE_NOTES.txt` is optional. When it is present, its text is the release note and the notes box on the form is ignored. `.env` may sit next to those files. The site does not publish it. Release history shows that version as one collapsible section, with the note above the downloads. Each zip inside it stays its own download. The previous version stays in the history.
 
 Dependencies are still one zip each:
 
