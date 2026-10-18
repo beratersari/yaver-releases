@@ -1,21 +1,16 @@
-{% from "macros.html" import edit_link, section_head, copy_view, copy_form with context %}
+{% from "macros.html" import edit_link, section_head, copy_view, copy_block, copy_form with context %}
 <section class="need" id="network-certificate" aria-labelledby="network-certificate-title">
   <p class="need-kicker">Before anything else</p>
-  <h2 class="need-title" id="network-certificate-title">Set AI_API_KEY and the network certificate.</h2>
-  <p class="need-copy">OpenCode and Codex read <code>AI_API_KEY</code>. Yaver passes that same variable to Claude. Node reads <code>NODE_EXTRA_CA_CERTS</code> to trust the network certificate. Set both system variables on the whole machine before those tools. The certificate address is the external link in the description below. Close every terminal and open a new one, then start Yaver again. On Linux, sign out and sign in so the system environment loads.</p>
-  <p class="warn" role="note"><strong>Warning</strong>: The OpenCode version should be <code>1.18.10</code>.</p>
-  <h3>API key</h3>
-  <p>Replace <code>YOUR_TOKEN</code> with the key. OpenCode and Codex read this system variable. Yaver passes it to Claude. Do not paste the key into their config files.</p>
-  <p>Windows. Run PowerShell as administrator. This command sets the system variable.</p>
-  <pre>[Environment]::SetEnvironmentVariable("AI_API_KEY", "YOUR_TOKEN", "Machine")</pre>
-  <p>Linux. This command sets the system variable in <code>/etc/environment</code>.</p>
-  <pre>sudo sed -i '/^AI_API_KEY=/d' /etc/environment &amp;&amp; echo 'AI_API_KEY=YOUR_TOKEN' | sudo tee -a /etc/environment >/dev/null</pre>
-  <h3>Windows</h3>
-  <p><a href="{{ cert_url or '#deps-intro' }}">Download it</a> and put it in <code>C:\certs\network-ca.crt</code>. Run PowerShell as administrator. This command sets the system variable.</p>
-  <pre>[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "C:\certs\network-ca.crt", "Machine")</pre>
-  <h3>Linux</h3>
-  <p><a href="{{ cert_url or '#deps-intro' }}">Download it</a> and put it in <code>~/certs/network-ca.crt</code>. This command adds the system variable to <code>/etc/environment</code>.</p>
-  <pre>grep -q '^NODE_EXTRA_CA_CERTS=' /etc/environment || echo "NODE_EXTRA_CA_CERTS=$HOME/certs/network-ca.crt" | sudo tee -a /etc/environment >/dev/null</pre>
+  {{ section_head('Set AI_API_KEY and the network certificate.', 'deps_cert', tag='h2', heading_id='network-certificate-title', title_class='need-title') }}
+  <div class="need-copy">
+    {{ copy_view('deps_cert') }}
+  </div>
+  {{ section_head('API key', 'deps_api_key') }}
+  {{ copy_view('deps_api_key') }}
+  {{ section_head('Windows', 'deps_cert_windows') }}
+  {{ copy_view('deps_cert_windows') }}
+  {{ section_head('Linux', 'deps_cert_linux') }}
+  {{ copy_view('deps_cert_linux') }}
 </section>
 
 <div class="lede-block" id="deps-intro">
@@ -35,7 +30,7 @@
       {{ section_head('Linux', item.linux_copy) }}
       {{ copy_view(item.linux_copy) }}
       {% if item.id == "opencode" %}
-      <p class="warn" role="note"><strong>Warning</strong>: The installer writes <code>opencode.json</code> and the CLI under the user's <code>.opencode</code> folder. On Windows that folder is <code>%USERPROFILE%\.opencode</code>. On Linux it is <code>~/.opencode</code>. Settings Sync also copies agents into <code>%USERPROFILE%\.opencode\agents</code> and <code>%USERPROFILE%\.config\opencode\agents</code> on Windows, and into <code>~/.opencode/agents</code> and <code>~/.config/opencode/agents</code> on Linux. Leave those folders in place.</p>
+      {{ copy_block('opencode_warning') }}
       {% endif %}
       <div class="sample" id="copy-{{ config_key }}">
         <div class="sample-bar">

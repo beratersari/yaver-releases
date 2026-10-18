@@ -19,6 +19,8 @@ _INLINE = re.compile(r"`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)")
 SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("home_intro", "Release history introduction", "Release history"),
     ("home_update", "Release history, after install", "Release history"),
+    ("install_workers", "Install the worker selected in Settings", "Install"),
+    ("install_howto", "Install page, before the commands", "Install"),
     ("install_intro", "Install page introduction", "Install"),
     ("windows", "Windows install", "Install"),
     ("windows_update", "Windows update", "Install"),
@@ -27,7 +29,8 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("ubuntu20", "Ubuntu 20.04", "Install"),
     ("ubuntu22", "Ubuntu 22.04", "Install"),
     ("ubuntu24", "Ubuntu 24.04", "Install"),
-    ("ubuntu_update", "Ubuntu update, shown in each version", "Install"),
+    ("ubuntu_update", "Ubuntu update", "Install"),
+    ("use_dashboard", "Use the dashboard", "How to use"),
     ("use_settings", "1. Save Settings", "How to use"),
     ("use_scheduled", "2. Start from Scheduled", "How to use"),
     ("use_existing_issue", "2.1 Run an existing Jira issue", "How to use"),
@@ -46,9 +49,14 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("use_jira", "Using it from the Jira website", "How to use"),
     ("use_review", "Using it from the GitLab or Azure website", "How to use"),
     ("use_azure", "Using it from the Azure Boards website", "How to use"),
+    ("deps_cert", "Network certificate", "Dependencies"),
+    ("deps_api_key", "API key", "Dependencies"),
+    ("deps_cert_windows", "Certificate on Windows", "Dependencies"),
+    ("deps_cert_linux", "Certificate on Linux", "Dependencies"),
     ("deps_intro", "Dependencies introduction", "Dependencies"),
     ("opencode_windows", "OpenCode on Windows", "Dependencies"),
     ("opencode_linux", "OpenCode on Linux", "Dependencies"),
+    ("opencode_warning", "OpenCode warning", "Dependencies"),
     ("claude_windows", "Claude Code on Windows", "Dependencies"),
     ("claude_linux", "Claude Code on Linux", "Dependencies"),
     ("codex_windows", "Codex on Windows", "Dependencies"),
@@ -148,6 +156,7 @@ TOKEN_HELP: tuple[tuple[str, str], ...] = (
     ("{claude_linux}", "Claude Code for Linux"),
     ("{codex_windows}", "Codex for Windows"),
     ("{codex_linux}", "Codex for Linux"),
+    ("{certificate}", "the certificate link from the Dependencies introduction"),
 )
 
 def _ubuntu_steps(version: str, token: str) -> str:
@@ -187,6 +196,15 @@ DEFAULTS: dict[str, str] = {
         "`update.sh` yet, download the zip once, copy that script into "
         "the Yaver folder, and run it there."
     ),
+    "install_workers": (
+        "How to use sets Worker to OpenCode. Claude Code and Codex are the "
+        "other workers. Install the one you select.\n\n"
+        "Warning: The OpenCode version should be `1.18.10`."
+    ),
+    "install_howto": (
+        "When the dashboard is open, [How to use](/how-to) walks through a "
+        "plan, a build, and a review."
+    ),
     "install_intro": (
         "Open this page from the address the other computers use, then copy "
         "the commands. Everyone installs the executable. The commands "
@@ -219,18 +237,29 @@ update.bat
         "run `sudo apt-get install -y unzip` once. Run Yaver as the account "
         "that should own the work. Do not use root. The log is `yaver.log` "
         "in that folder. The commands allow TCP and UDP port 8080 in ufw. Open "
-        "`http://<ip>:8080` on that machine."
+        "`http://<ip>:8080` on that machine. The update command below is the "
+        "same on each version."
     ),
     "ubuntu18": _ubuntu_steps("18.04", "ubuntu18"),
     "ubuntu20": _ubuntu_steps("20.04", "ubuntu20"),
     "ubuntu22": _ubuntu_steps("22.04", "ubuntu22"),
     "ubuntu24": _ubuntu_steps("24.04", "ubuntu24"),
-    "ubuntu_update": r"""```
+    "ubuntu_update": """Run this from the Yaver folder on Ubuntu 18.04, 20.04, 22.04, or 24.04.
+
+```
 cd "$HOME/yaver"
 chmod 755 update.sh
 ./update.sh
 ```
 """,
+    "use_dashboard": (
+        "The Yaver dashboard is the page at `http://<ip>:8080`. Open Using "
+        "it from the dashboard and follow the sections inside. That is the "
+        "easier way. A question on a merge request or a pull request stays "
+        "a comment, `@name /ask`. That command is not a button on the "
+        "dashboard. Using it from external sites is for the Jira, GitLab, "
+        "or Azure website. Using it on those websites is harder."
+    ),
     "use_settings": """Open the dashboard at `http://<ip>:8080`.
 
 1. If the page asks you to sign in, use `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` from `.env`.
@@ -437,6 +466,44 @@ Set `Mode: build` when the first assignment should write the code, with no plan 
 
 Assigning the work item starts the plan or the build. Assign the Azure trigger user as a reviewer on the pull request to start a review.
 """,
+    "deps_cert": (
+        "OpenCode and Codex read `AI_API_KEY`. Yaver passes that same "
+        "variable to Claude. Node reads `NODE_EXTRA_CA_CERTS` to trust the "
+        "network certificate. Set both system variables on the whole machine "
+        "before those tools. The certificate address is the external link in "
+        "the description below. Close every terminal and open a new one, then "
+        "start Yaver again. On Linux, sign out and sign in so the system "
+        "environment loads."
+    ),
+    "deps_api_key": (
+        "Replace `YOUR_TOKEN` with the key. OpenCode and Codex read this "
+        "system variable. Yaver passes it to Claude. Do not paste the key "
+        "into their config files."
+    ),
+    "deps_cert_windows": r"""Run PowerShell as administrator. This command sets `AI_API_KEY`.
+
+```
+[Environment]::SetEnvironmentVariable("AI_API_KEY", "YOUR_TOKEN", "Machine")
+```
+
+[Download it]({certificate}) and put it in `C:\certs\network-ca.crt`. This command sets `NODE_EXTRA_CA_CERTS`.
+
+```
+[Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "C:\certs\network-ca.crt", "Machine")
+```
+""",
+    "deps_cert_linux": r"""This command sets `AI_API_KEY` in `/etc/environment`.
+
+```
+sudo sed -i '/^AI_API_KEY=/d' /etc/environment && echo 'AI_API_KEY=YOUR_TOKEN' | sudo tee -a /etc/environment >/dev/null
+```
+
+[Download it]({certificate}) and put it in `~/certs/network-ca.crt`. This command adds `NODE_EXTRA_CA_CERTS` to `/etc/environment`.
+
+```
+grep -q '^NODE_EXTRA_CA_CERTS=' /etc/environment || echo "NODE_EXTRA_CA_CERTS=$HOME/certs/network-ca.crt" | sudo tee -a /etc/environment >/dev/null
+```
+""",
     "deps_intro": (
         "OpenCode, Claude Code, and Codex are not inside the Yaver executable. "
         "Each tool is its own zip. Windows and Linux are separate files. "
@@ -473,6 +540,16 @@ nano opencode/opencode.json
 ./install-opencode.sh
 ```
 """,
+    "opencode_warning": (
+        "Warning: The installer writes `opencode.json` and the CLI under the "
+        "user's `.opencode` folder. On Windows that folder is "
+        r"`%USERPROFILE%\.opencode`. On Linux it is `~/.opencode`. Settings "
+        "Sync also copies agents into "
+        r"`%USERPROFILE%\.opencode\agents` and "
+        r"`%USERPROFILE%\.config\opencode\agents` on Windows, and into "
+        "`~/.opencode/agents` and `~/.config/opencode/agents` on Linux. "
+        "Leave those folders in place."
+    ),
     "claude_windows": r"""The zip contains `install-claude.bat`, `claude.exe`, and `settings.json`. Set `YOUR_HOST` in `settings.json`. Yaver passes `AI_API_KEY` to Claude. Do not paste the key into `settings.json`. Then run the commands. The install command copies `settings.json` to `%USERPROFILE%\.claude\settings.json`. If `claude.exe` is already on PATH, the installer replaces that file and renames the old one with the date. On a first install the CLI goes to `%USERPROFILE%\.local\bin`. Open a new terminal afterward.
 
 PowerShell:
@@ -586,10 +663,16 @@ def sections_for_edit(
                 "tall": key not in {
                     "home_intro",
                     "home_update",
+                    "install_workers",
+                    "install_howto",
                     "install_intro",
                     "ubuntu_intro",
+                    "use_dashboard",
                     "use_intro",
+                    "deps_cert",
+                    "deps_api_key",
                     "deps_intro",
+                    "opencode_warning",
                 },
             }
         )
@@ -627,11 +710,16 @@ def source_map(
     return sources
 
 
-def public_html(stored: Mapping[str, str], tokens: Mapping[str, str]) -> dict[str, Markup]:
+def public_html(
+    stored: Mapping[str, str],
+    tokens: Mapping[str, str],
+    *,
+    site_prefix: str = "",
+) -> dict[str, Markup]:
     rendered: dict[str, Markup] = {}
     for key, _label, _page in SECTIONS:
         raw = stored[key] if key in stored else DEFAULTS[key]
-        rendered[key] = render_copy(fill(raw, tokens))
+        rendered[key] = render_copy(fill(raw, tokens), site_prefix=site_prefix)
     return rendered
 
 
@@ -684,12 +772,13 @@ def tokens_from_url(base_url: str, host: str, port: int | None, scheme: str) -> 
     }
 
 
-def render_copy(text: str) -> Markup:
+def render_copy(text: str, *, site_prefix: str = "") -> Markup:
     """Turn admin text into HTML.
 
     A line that is only ``` opens a command block. `backticks` mark a short
-    command. ``[label](url)`` makes a link when the url is http(s) or a
-    same-site path. Every other character is escaped.
+    command. A one-line paragraph that starts with ``Warning:`` becomes a
+    warning. ``[label](url)`` makes a link when the url is http(s), a
+    same-site path, or a same-page hash. Every other character is escaped.
     """
     lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     blocks: list[Markup] = []
@@ -712,12 +801,21 @@ def render_copy(text: str) -> Markup:
         while index < len(lines) and lines[index].strip() and not lines[index].strip().startswith("```"):
             paragraph.append(lines[index])
             index += 1
-        inner = Markup("<br>\n").join(_inline(line) for line in paragraph)
+        stripped = paragraph[0].strip()
+        if len(paragraph) == 1 and stripped.startswith("Warning:"):
+            rest = stripped[len("Warning:") :].lstrip()
+            blocks.append(
+                Markup('<p class="warn" role="note"><strong>Warning</strong>: ')
+                + _inline(rest, site_prefix)
+                + Markup("</p>")
+            )
+            continue
+        inner = Markup("<br>\n").join(_inline(line, site_prefix) for line in paragraph)
         blocks.append(Markup("<p>") + inner + Markup("</p>"))
     return Markup("\n").join(blocks)
 
 
-def _inline(text: str) -> Markup:
+def _inline(text: str, site_prefix: str = "") -> Markup:
     parts: list[Markup] = []
     cursor = 0
     for match in _INLINE.finditer(text):
@@ -731,7 +829,7 @@ def _inline(text: str) -> Markup:
             if _href_ok(url):
                 parts.append(
                     Markup('<a href="')
-                    + escape(url)
+                    + escape(_prefixed_href(url, site_prefix))
                     + Markup('">')
                     + escape(label)
                     + Markup("</a>")
@@ -743,7 +841,26 @@ def _inline(text: str) -> Markup:
     return Markup("").join(parts)
 
 
+def _prefixed_href(url: str, site_prefix: str) -> str:
+    """Point Install, How to use, Release history, and Dependencies at /admin when signed in."""
+    if site_prefix != "/admin" or not url.startswith("/") or url.startswith("//"):
+        return url
+    path, mark, fragment = url.partition("#")
+    if path in ("/", "/install"):
+        prefixed = "/admin/install"
+    elif path in ("/how-to", "/releases", "/dependencies"):
+        prefixed = "/admin" + path
+    else:
+        return url
+    if mark:
+        return f"{prefixed}#{fragment}"
+    return prefixed
+
+
 def _href_ok(url: str) -> bool:
+    if url.startswith("#"):
+        name = url[1:]
+        return bool(name) and not any(char in url for char in " \t\r\n\"'<>\\")
     if url.startswith("/") and not url.startswith("//") and "\\" not in url:
         return True
     lowered = url.lower()

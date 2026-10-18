@@ -2,23 +2,26 @@
 {% from "macros.html" import edit_link, section_head, copy_view with context %}
 {% block title %}Install Yaver{% endblock %}
 {% block body %}
+<p class="kicker">First install</p>
+<h1>Install Yaver</h1>
 <section class="need" aria-label="Workers">
   <p class="need-kicker">Before anything else</p>
-  <p class="need-title">Install the worker selected in Settings.</p>
-  <p class="need-copy">How to use sets Worker to OpenCode. Claude Code and Codex are the other workers. Install the one you select.</p>
-  <p class="warn" role="note"><strong>Warning</strong>: The OpenCode version should be <code>1.18.10</code>.</p>
+  {{ section_head('Install the worker selected in Settings.', 'install_workers', tag='h2', title_class='need-title') }}
+  <div class="need-copy">
+    {{ copy_view('install_workers') }}
+  </div>
   <div class="need-grid">
-    <a class="need-card is-required" href="/dependencies#opencode">
+    <a class="need-card is-required" href="{{ page_prefix }}/dependencies#opencode">
       <span class="tag need-tag">How to use</span>
       <strong>OpenCode</strong>
       <span>An OpenCode job needs this CLI.</span>
     </a>
-    <a class="need-card" href="/dependencies#claude">
+    <a class="need-card" href="{{ page_prefix }}/dependencies#claude">
       <span class="tag">Other worker</span>
       <strong>Claude Code</strong>
       <span>Install this when Worker is Claude Code.</span>
     </a>
-    <a class="need-card" href="/dependencies#codex">
+    <a class="need-card" href="{{ page_prefix }}/dependencies#codex">
       <span class="tag">Other worker</span>
       <strong>Codex</strong>
       <span>Install this when Worker is Codex.</span>
@@ -26,9 +29,10 @@
   </div>
 </section>
 
-<p class="kicker">First install</p>
-<h1>Install Yaver</h1>
-<p>When the dashboard is open, <a href="/how-to">How to use</a> walks through a plan, a build, and a review.</p>
+<div class="lede-block">
+  {{ edit_link('install_howto') }}
+  {{ copy_view('install_howto') }}
+</div>
 <div class="lede-block">
   {{ edit_link('install_intro') }}
   {{ copy_view('install_intro') }}
@@ -63,10 +67,13 @@
     <div class="fold-body">
       {{ section_head('Install', item[2]) }}
       {{ copy_view(item[2]) }}
-      {{ section_head('Update', 'ubuntu_update', item[0]) }}
-      {{ copy_view('ubuntu_update', item[0]) }}
     </div>
   </details>
   {% endfor %}
+</div>
+
+<div id="ubuntu-update">
+  {{ section_head('Update', 'ubuntu_update') }}
+  {{ copy_view('ubuntu_update') }}
 </div>
 {% endblock %}

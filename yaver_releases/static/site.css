@@ -502,7 +502,7 @@ p { margin: 0.35rem 0 0.8rem; }
 
 .artifacts .button { margin-top: 0; }
 
-.need a:not(.button):not(.need-card) {
+.need a:not(.button):not(.need-card):not(.copy-edit) {
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }
@@ -537,7 +537,9 @@ h2.need-title {
   line-height: 1.15;
 }
 
-.need-copy {
+.need-copy { margin: 0.55rem 0 0; }
+
+.need-copy p:not(.warn) {
   margin: 0.55rem 0 0;
   color: var(--text-secondary);
   font-size: 1rem;
@@ -1022,7 +1024,10 @@ textarea.sample-config {
 
 .fold-body > .copy-head:first-child { margin-top: 0.85rem; }
 
+.copy-head h2,
 .copy-head h3 { margin: 0; flex: 1 1 auto; }
+
+.copy-head.need-title-head { margin: 0.35rem 0 0; }
 
 a.copy-edit {
   display: inline-flex;
@@ -1050,12 +1055,14 @@ a.copy-edit:hover {
   color: var(--text);
 }
 
-body.inplace .lede-block {
+body.inplace .lede-block:has(> a.copy-edit),
+body.inplace .copy-note:has(> a.copy-edit) {
   position: relative;
   padding-right: 5.75rem;
 }
 
-body.inplace .lede-block > a.copy-edit {
+body.inplace .lede-block > a.copy-edit,
+body.inplace .copy-note > a.copy-edit {
   position: absolute;
   top: 0.15rem;
   right: 0;
@@ -1073,6 +1080,11 @@ body.inplace .lede-block > a.copy-edit {
 .copy-actions a.button { margin-top: 0; }
 
 .admin-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 1rem;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border-strong);
@@ -1080,6 +1092,10 @@ body.inplace .lede-block > a.copy-edit {
   color: var(--text);
   font-size: 0.85rem;
 }
+
+.admin-bar p,
+.admin-bar form,
+.admin-bar button { margin: 0; }
 
 .sample-actions {
   display: flex;

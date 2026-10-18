@@ -4,7 +4,15 @@
 <p class="kicker">Admin</p>
 <h1>Analytics</h1>
 <p class="lede">Each address is one Yaver install. Select it to load that install’s jobs, merge requests, and the other Analytics counts, with its version, platform, and last contact.</p>
-<p><a href="/admin">Back to publish</a></p>
+<p><a href="/admin/releases#publish">Back to publish</a></p>
+
+<h2>Tools</h2>
+<p class="quiet">How many times each tool was installed.</p>
+<div class="stats">
+  {% for tool in tools %}
+  <div class="stat"><span class="num">{{ tool.installs }}</span><span class="lbl">{{ tool.label }}</span></div>
+  {% endfor %}
+</div>
 
 {% if not known %}
 <p class="quiet">No installation has asked for a release yet.</p>

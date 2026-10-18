@@ -1,5 +1,5 @@
 {% macro edit_link(key, slot='') -%}
-{% if inplace %}
+{% if inplace and not (edit_key == key and edit_slot == (slot or '')) %}
 <a class="copy-edit" data-copy-key="{{ key }}" href="?edit={{ key }}{% if slot %}&slot={{ slot }}{% endif %}#copy-{{ key }}{% if slot %}-{{ slot }}{% endif %}" aria-label="Edit {{ copy_labels[key] }}" title="{{ copy_labels[key] }}">
   <svg class="copy-edit-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M9.2 2.6 13.4 6.8 6 14.2H1.8V10L9.2 2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
@@ -10,12 +10,10 @@
 {% endif %}
 {%- endmacro %}
 
-{% macro section_head(title, key, slot='') -%}
-<div class="copy-head">
-  <h3>{{ title }}</h3>
-  {% if not (inplace and edit_key == key and edit_slot == (slot or '')) %}
+{% macro section_head(title, key, slot='', tag='h3', heading_id='', title_class='') -%}
+<div class="copy-head{% if title_class %} {{ title_class }}-head{% endif %}">
+  <{{ tag }}{% if heading_id %} id="{{ heading_id }}"{% endif %}{% if title_class %} class="{{ title_class }}"{% endif %}>{{ title }}</{{ tag }}>
   {{ edit_link(key, slot) }}
-  {% endif %}
 </div>
 {%- endmacro %}
 
@@ -45,5 +43,12 @@
   {% else %}
   {{ sections[key] }}
   {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro copy_block(key, slot='') -%}
+<div class="copy-note">
+  {{ edit_link(key, slot) }}
+  {{ copy_view(key, slot) }}
 </div>
 {%- endmacro %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import edit_link, copy_view with context %}
+{% from "macros.html" import section_head, copy_block, copy_view with context %}
 {% block title %}How to use Yaver{% endblock %}
 {% block body %}
 <p class="kicker">Daily work</p>
@@ -7,106 +7,102 @@
 
 <section class="need" id="dashboard" aria-labelledby="dashboard-title">
   <p class="need-kicker">Use this</p>
-  <h2 class="need-title" id="dashboard-title">Use the dashboard.</h2>
-  <p class="need-copy">The Yaver dashboard is the page at <code>http://&lt;ip&gt;:8080</code>. Open Using it from the dashboard and follow the sections inside. That is the easier way. A question on a merge request or a pull request stays a comment, <code>@name /ask</code>. That command is not a button on the dashboard. Using it from external sites is for the Jira, GitLab, or Azure website. Using it on those websites is harder.</p>
+  {{ section_head('Use the dashboard.', 'use_dashboard', tag='h2', heading_id='dashboard-title', title_class='need-title') }}
+  <div class="need-copy">
+    {{ copy_view('use_dashboard') }}
+  </div>
 </section>
 
 <div class="folds">
   <details class="fold" id="from-dashboard">
     <summary><h2>Using it from the dashboard</h2></summary>
     <div class="fold-body">
-<div class="folds">
-  <details class="fold" id="dash-settings">
-    <summary><h2>1. Save Settings</h2>{{ edit_link('use_settings') }}</summary>
-    <div class="fold-body">{{ copy_view('use_settings') }}</div>
-  </details>
-  <details class="fold" id="dash-scheduled">
-    <summary><h2>2. Start from Scheduled</h2>{{ edit_link('use_scheduled') }}</summary>
-    <div class="fold-body">
-      {{ copy_view('use_scheduled') }}
       <div class="folds">
-        <details class="fold" id="dash-existing-issue">
-          <summary><h3>2.1 Run an existing Jira issue</h3>{{ edit_link('use_existing_issue') }}</summary>
-          <div class="fold-body">{{ copy_view('use_existing_issue') }}</div>
+        <details class="fold" id="dash-settings">
+          <summary><h2>1. Save Settings</h2></summary>
+          <div class="fold-body">{{ copy_block('use_settings') }}</div>
         </details>
-        <details class="fold" id="dash-existing-work-item">
-          <summary><h3>2.2 Run an existing Azure work item</h3>{{ edit_link('use_existing_work_item') }}</summary>
-          <div class="fold-body">{{ copy_view('use_existing_work_item') }}</div>
+        <details class="fold" id="dash-scheduled">
+          <summary><h2>2. Start from Scheduled</h2></summary>
+          <div class="fold-body">
+            {{ copy_block('use_scheduled') }}
+            <div class="folds">
+              <details class="fold" id="dash-existing-issue">
+                <summary><h3>2.1 Run an existing Jira issue</h3></summary>
+                <div class="fold-body">{{ copy_block('use_existing_issue') }}</div>
+              </details>
+              <details class="fold" id="dash-existing-work-item">
+                <summary><h3>2.2 Run an existing Azure work item</h3></summary>
+                <div class="fold-body">{{ copy_block('use_existing_work_item') }}</div>
+              </details>
+              <details class="fold" id="dash-new-issue">
+                <summary><h3>2.3 Create a Jira issue</h3></summary>
+                <div class="fold-body">{{ copy_block('use_new_issue') }}</div>
+              </details>
+              <details class="fold" id="dash-new-work-item">
+                <summary><h3>2.4 Create an Azure work item</h3></summary>
+                <div class="fold-body">{{ copy_block('use_new_work_item') }}</div>
+              </details>
+              <details class="fold" id="dash-existing-mr">
+                <summary><h3>2.5 Continue or review a GitLab merge request</h3></summary>
+                <div class="fold-body">{{ copy_block('use_existing_mr') }}</div>
+              </details>
+              <details class="fold" id="dash-existing-pr">
+                <summary><h3>2.6 Continue or review an Azure pull request</h3></summary>
+                <div class="fold-body">{{ copy_block('use_existing_pr') }}</div>
+              </details>
+            </div>
+          </div>
         </details>
-        <details class="fold" id="dash-new-issue">
-          <summary><h3>2.3 Create a Jira issue</h3>{{ edit_link('use_new_issue') }}</summary>
-          <div class="fold-body">{{ copy_view('use_new_issue') }}</div>
+        <details class="fold" id="dash-jobs">
+          <summary><h2>3. Open the job</h2></summary>
+          <div class="fold-body">
+            {{ copy_block('use_jobs') }}
+            <div class="folds">
+              <details class="fold" id="dash-implement">
+                <summary><h3>3.1 Choose Implement</h3></summary>
+                <div class="fold-body">{{ copy_block('use_implement') }}</div>
+              </details>
+              <details class="fold" id="dash-revise">
+                <summary><h3>3.2 Choose Revise</h3></summary>
+                <div class="fold-body">{{ copy_block('use_revise') }}</div>
+              </details>
+              <details class="fold" id="dash-stop">
+                <summary><h3>3.3 Choose Stop work</h3></summary>
+                <div class="fold-body">{{ copy_block('use_stop') }}</div>
+              </details>
+            </div>
+          </div>
         </details>
-        <details class="fold" id="dash-new-work-item">
-          <summary><h3>2.4 Create an Azure work item</h3>{{ edit_link('use_new_work_item') }}</summary>
-          <div class="fold-body">{{ copy_view('use_new_work_item') }}</div>
+        <details class="fold" id="dash-repos">
+          <summary><h2>4. Work in several repositories</h2></summary>
+          <div class="fold-body">{{ copy_block('use_repos') }}</div>
         </details>
-        <details class="fold" id="dash-existing-mr">
-          <summary><h3>2.5 Continue or review a GitLab merge request</h3>{{ edit_link('use_existing_mr') }}</summary>
-          <div class="fold-body">{{ copy_view('use_existing_mr') }}</div>
-        </details>
-        <details class="fold" id="dash-existing-pr">
-          <summary><h3>2.6 Continue or review an Azure pull request</h3>{{ edit_link('use_existing_pr') }}</summary>
-          <div class="fold-body">{{ copy_view('use_existing_pr') }}</div>
+        <details class="fold" id="dash-storage">
+          <summary><h2>5. Open Storage and Sessions</h2></summary>
+          <div class="fold-body">{{ copy_block('use_storage') }}</div>
         </details>
       </div>
-    </div>
-  </details>
-  <details class="fold" id="dash-jobs">
-    <summary><h2>3. Open the job</h2>{{ edit_link('use_jobs') }}</summary>
-    <div class="fold-body">
-      {{ copy_view('use_jobs') }}
-      <div class="folds">
-        <details class="fold" id="dash-implement">
-          <summary><h3>3.1 Choose Implement</h3>{{ edit_link('use_implement') }}</summary>
-          <div class="fold-body">{{ copy_view('use_implement') }}</div>
-        </details>
-        <details class="fold" id="dash-revise">
-          <summary><h3>3.2 Choose Revise</h3>{{ edit_link('use_revise') }}</summary>
-          <div class="fold-body">{{ copy_view('use_revise') }}</div>
-        </details>
-        <details class="fold" id="dash-stop">
-          <summary><h3>3.3 Choose Stop work</h3>{{ edit_link('use_stop') }}</summary>
-          <div class="fold-body">{{ copy_view('use_stop') }}</div>
-        </details>
-      </div>
-    </div>
-  </details>
-  <details class="fold" id="dash-repos">
-    <summary><h2>4. Work in several repositories</h2>{{ edit_link('use_repos') }}</summary>
-    <div class="fold-body">{{ copy_view('use_repos') }}</div>
-  </details>
-  <details class="fold" id="dash-storage">
-    <summary><h2>5. Open Storage and Sessions</h2>{{ edit_link('use_storage') }}</summary>
-    <div class="fold-body">{{ copy_view('use_storage') }}</div>
-  </details>
-</div>
     </div>
   </details>
   <details class="fold" id="from-external">
-    <summary><h2>Using it from external sites</h2>{{ edit_link('use_intro') }}</summary>
+    <summary><h2>Using it from external sites</h2></summary>
     <div class="fold-body">
-      {{ copy_view('use_intro') }}
-<div class="folds">
-  <details class="fold" id="jira">
-    <summary><h2>Using it from the Jira website</h2>{{ edit_link('use_jira') }}</summary>
-    <div class="fold-body">
-      {{ copy_view('use_jira') }}
-    </div>
-  </details>
-  <details class="fold" id="review">
-    <summary><h2>Using it from the GitLab or Azure website</h2>{{ edit_link('use_review') }}</summary>
-    <div class="fold-body">
-      {{ copy_view('use_review') }}
-    </div>
-  </details>
-  <details class="fold" id="azure">
-    <summary><h2>Using it from the Azure Boards website</h2>{{ edit_link('use_azure') }}</summary>
-    <div class="fold-body">
-      {{ copy_view('use_azure') }}
-    </div>
-  </details>
-</div>
+      {{ copy_block('use_intro') }}
+      <div class="folds">
+        <details class="fold" id="jira">
+          <summary><h2>Using it from the Jira website</h2></summary>
+          <div class="fold-body">{{ copy_block('use_jira') }}</div>
+        </details>
+        <details class="fold" id="review">
+          <summary><h2>Using it from the GitLab or Azure website</h2></summary>
+          <div class="fold-body">{{ copy_block('use_review') }}</div>
+        </details>
+        <details class="fold" id="azure">
+          <summary><h2>Using it from the Azure Boards website</h2></summary>
+          <div class="fold-body">{{ copy_block('use_azure') }}</div>
+        </details>
+      </div>
     </div>
   </details>
 </div>

@@ -470,37 +470,79 @@ class ReleaseStore:
             )
 
     def list_installations(self) -> list[dict]:
-        """One row per address, most recently seen first."""
+        """One Yaver address per row, most recently seen first.
+
+        OpenCode, Claude Code, and Codex downloads stay out of this list.
+        ``tool_install_counts`` is the total for each of those tools.
+        """
+        platforms = tuple(PLATFORMS)
+        marks = ",".join("?" for _ in platforms)
         with self._connect() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT h.ip, h.seen_at, h.kind, h.platform, h.client_version,
                        h.published_version, c.hits, c.first_seen
                 FROM install_hits h
                 JOIN (
                     SELECT ip, MAX(id) AS id, COUNT(*) AS hits, MIN(seen_at) AS first_seen
                     FROM install_hits
+                    WHERE platform IN ({marks})
                     GROUP BY ip
                 ) c ON c.id = h.id
                 ORDER BY h.seen_at DESC, h.ip ASC
-                """
+                """,
+                platforms,
             ).fetchall()
         # Counts come from a live GET when an admin selects one address.
         # A stored install_usage row is not the list.
         return [self._installation_summary(row) for row in rows]
+
+    def tool_install_counts(self) -> list[dict]:
+        """How many times OpenCode, Claude Code, and Codex were downloaded."""
+        families = (
+            ("opencode", "OpenCode"),
+            ("claude", "Claude Code"),
+            ("codex", "Codex"),
+        )
+        keys = tuple(DEPENDENCIES)
+        marks = ",".join("?" for _ in keys)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT platform, COUNT(*) AS hits
+                FROM install_hits
+                WHERE kind = 'download' AND platform IN ({marks})
+                GROUP BY platform
+                """,
+                keys,
+            ).fetchall()
+        by_platform = {str(row["platform"]): int(row["hits"]) for row in rows}
+        counted: list[dict] = []
+        for key, label in families:
+            installs = sum(
+                hits
+                for platform, hits in by_platform.items()
+                if platform == key or platform.startswith(f"{key}-")
+            )
+            counted.append({"id": key, "label": label, "installs": installs})
+        return counted
 
     def installations_with_events(self, *, per_ip: int = 40) -> list[dict]:
         """Every address, with its newest requests. Empty when nobody has checked in."""
         cap = max(1, min(int(per_ip), 100))
         summaries = self.list_installations()
         grouped: dict[str, list[dict]] = {}
+        platforms = tuple(PLATFORMS)
+        marks = ",".join("?" for _ in platforms)
         with self._connect() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT ip, seen_at, kind, platform, client_version, published_version
                 FROM install_hits
+                WHERE platform IN ({marks})
                 ORDER BY id DESC
-                """
+                """,
+                platforms,
             ).fetchall()
         for row in rows:
             ip = str(row["ip"])
@@ -531,16 +573,18 @@ class ReleaseStore:
         summary = next((row for row in self.list_installations() if row["ip"] == wanted), None)
         if summary is None:
             return None
+        platforms = tuple(PLATFORMS)
+        marks = ",".join("?" for _ in platforms)
         with self._connect() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT seen_at, kind, platform, client_version, published_version
                 FROM install_hits
-                WHERE ip = ?
+                WHERE ip = ? AND platform IN ({marks})
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (wanted, max(1, min(int(limit), 100))),
+                (wanted, *platforms, max(1, min(int(limit), 100))),
             ).fetchall()
         detail = dict(summary)
         detail["events"] = [

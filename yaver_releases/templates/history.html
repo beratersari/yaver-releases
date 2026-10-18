@@ -13,6 +13,111 @@
   {{ copy_view('home_update') }}
 </div>
 
+{% if inplace %}
+<h2 id="publish">Publish a release</h2>
+<p class="lede">Upload one zip for Windows and every Ubuntu version. The files inside are named with the version, for example <code>yaver-windows-x64-0.9.79.zip</code> and <code>yaver-linux-x64-ubuntu-22.04-0.9.79.zip</code>. This form does not ask for a version. Colleagues still download each system on its own. A zip that contains only one folder is opened before those names are read. Dependency zips are separate: one tool, with a <code>VERSION</code> file that is that tool's version. update.bat and update.sh do not install those.</p>
+
+<h2>Yaver packages</h2>
+<form class="panel" method="post" action="/admin/upload" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="kind" value="bundle">
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" maxlength="8000" placeholder="What changed in this package." aria-describedby="notes-hint"></textarea>
+  <p id="notes-hint" class="quiet">Leave this empty when the zip contains RELEASE_NOTES.txt. That file is the release note for the version.</p>
+  <label for="package">Zip file</label>
+  <input id="package" name="package" type="file" accept=".zip,application/zip" required>
+  <p><button type="submit">Publish</button></p>
+</form>
+
+<h2>One dependency</h2>
+<form class="panel" method="post" action="/admin/upload" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="platform">Package</label>
+  <select id="platform" name="platform" required>
+    {% for key, label in dependency_platforms.items() %}
+    <option value="{{ key }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label for="version">Version</label>
+  <input id="version" name="version" inputmode="decimal" placeholder="1.18.10" autocomplete="off" aria-describedby="version-hint">
+  <p id="version-hint" class="quiet">Leave this empty when the zip has a VERSION file at the top. That file is the tool's version.</p>
+  <label for="dependency-notes">Notes</label>
+  <textarea id="dependency-notes" name="notes" maxlength="8000" placeholder="What changed in this tool."></textarea>
+  <label for="dependency-package">Zip file</label>
+  <input id="dependency-package" name="package" type="file" accept=".zip,application/zip" required>
+  <p><button type="submit">Publish</button></p>
+</form>
+
+<h2>Current packages</h2>
+<p class="quiet">Each row is the current package. Older versions stay on Release history.</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Version</th>
+      <th>Kind</th>
+      <th>File</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in releases %}
+    <tr>
+      <td>{{ row.label }}</td>
+      <td>{{ row.version or "—" }}</td>
+      <td>{{ row.layout|layout_label or "—" }}{% if row.layout == "unknown" %}. Machines will refuse this zip.{% endif %}</td>
+      <td>{% if row.filename %}{{ row.filename }} · {{ row.size|size }}{% else %}—{% endif %}</td>
+      <td>
+        {% if row.version %}
+        <form method="post" action="/admin/delete">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="platform" value="{{ row.platform }}">
+          <button class="danger" type="submit">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Dependency packages</h2>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Package</th>
+      <th>Version</th>
+      <th>Kind</th>
+      <th>File</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in dependency_rows %}
+    <tr>
+      <td>{{ row.label }}</td>
+      <td>{{ row.version or "—" }}</td>
+      <td>{{ row.layout|layout_label or "—" }}{% if row.layout == "unknown" %}. This zip is not a CLI package.{% endif %}</td>
+      <td>{% if row.filename %}{{ row.filename }} · {{ row.size|size }}{% else %}—{% endif %}</td>
+      <td>
+        {% if row.version %}
+        <form method="post" action="/admin/delete">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="platform" value="{{ row.platform }}">
+          <button class="danger" type="submit">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
 {% if history %}
 <div class="folds">
   {% for group in history %}
@@ -46,6 +151,6 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="quiet">No release has been published.</p>
+<p class="quiet">No release has been published yet.</p>
 {% endif %}
 {% endblock %}

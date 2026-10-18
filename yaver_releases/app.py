@@ -12,6 +12,7 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -35,17 +36,14 @@ from yaver_releases.copy import (
     DEFAULTS,
     SAMPLE_CONFIGS,
     SECTIONS,
-    TOKEN_HELP,
     CopyError,
     certificate_url,
     clean_body,
     config_body,
-    configs_for_edit,
     copy_catalog,
     known_copy_key,
     public_html,
     render_copy,
-    sections_for_edit,
     source_map,
     textarea_body,
     tokens_from_url,
@@ -72,8 +70,8 @@ from yaver_releases.store import ReleaseStore
 _ROOT = Path(__file__).resolve().parent
 
 
-def _template_context(request: Request) -> dict[str, bool]:
-    """Analytics stays on the publish pages. The admin host also shows it beside Edit."""
+def _template_context(request: Request) -> dict[str, bool | str]:
+    """A signed-in admin sees Analytics in the left bar on every page."""
     inplace = bool(getattr(request.state, "inplace", False))
     app = request.app
     secret = getattr(app.state, "secret", "")
@@ -85,15 +83,22 @@ def _template_context(request: Request) -> dict[str, bool]:
             and bool(str(current.get("user") or "").strip())
             and bool(str(current.get("csrf") or "").strip())
         )
-    path = (request.url.path or "/").rstrip("/") or "/"
-    on_admin = path == "/admin" or path.startswith("/admin/analytics")
     return {
-        "show_analytics_nav": bool((signed and on_admin) or (inplace and _admin_host(request))),
+        "show_analytics_nav": signed,
         "inplace": inplace,
+        "page_prefix": "/admin" if inplace else "",
     }
 
 
 _PUBLIC_PATHS = frozenset({"/", "/install", "/how-to", "/releases", "/dependencies"})
+_ADMIN_PAGE = {
+    "/": "/admin/install",
+    "/install": "/admin/install",
+    "/how-to": "/admin/how-to",
+    "/releases": "/admin/releases",
+    "/dependencies": "/admin/dependencies",
+}
+_ADMIN_CONTENT_PATHS = frozenset(_ADMIN_PAGE.values())
 _PATH_FOR_PAGE = {
     "Install": "/install",
     "How to use": "/how-to",
@@ -161,10 +166,27 @@ def _template_for_key(key: str) -> str:
 
 
 def _return_path(next_value: str, key: str) -> str:
+    """Save and Cancel land on the signed-in page, such as /admin/releases."""
     path = (next_value or "").strip()
-    if path in _PUBLIC_PATHS:
+    if path in _ADMIN_CONTENT_PATHS:
         return path
-    return _path_for_key(key)
+    if path in _ADMIN_PAGE:
+        return _ADMIN_PAGE[path]
+    return _ADMIN_PAGE.get(_path_for_key(key), "/admin/install")
+
+
+def _bounce_to_admin(request: Request) -> RedirectResponse | None:
+    """A signed-in reader opens /admin/releases instead of /releases."""
+    if not getattr(request.state, "inplace", False):
+        return None
+    target = _ADMIN_PAGE.get(request.url.path or "/")
+    if not target:
+        return None
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    response = RedirectResponse(target, status_code=302)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _anchor(key: str, slot: str) -> str:
@@ -369,19 +391,59 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/install", response_class=HTMLResponse)
-    def install(request: Request) -> HTMLResponse:
+    def install(request: Request):
+        bounced = _bounce_to_admin(request)
+        if bounced is not None:
+            return bounced
         return _render_public(request, store, "install.html")
 
     @app.get("/how-to", response_class=HTMLResponse)
-    def how_to(request: Request) -> HTMLResponse:
+    def how_to(request: Request):
+        bounced = _bounce_to_admin(request)
+        if bounced is not None:
+            return bounced
         return _render_public(request, store, "how-to.html")
 
     @app.get("/releases", response_class=HTMLResponse)
-    def release_history(request: Request) -> HTMLResponse:
+    def release_history(request: Request):
+        bounced = _bounce_to_admin(request)
+        if bounced is not None:
+            return bounced
         return _render_public(request, store, "history.html")
 
     @app.get("/dependencies", response_class=HTMLResponse)
-    def dependencies_page(request: Request) -> HTMLResponse:
+    def dependencies_page(request: Request):
+        bounced = _bounce_to_admin(request)
+        if bounced is not None:
+            return bounced
+        return _render_public(request, store, "tools.html")
+
+    @app.get("/admin/install", response_class=HTMLResponse)
+    def admin_install(request: Request):
+        session = _session_or_redirect(request, app)
+        if isinstance(session, RedirectResponse):
+            return session
+        return _render_public(request, store, "install.html")
+
+    @app.get("/admin/how-to", response_class=HTMLResponse)
+    def admin_how_to(request: Request):
+        session = _session_or_redirect(request, app)
+        if isinstance(session, RedirectResponse):
+            return session
+        return _render_public(request, store, "how-to.html")
+
+    @app.get("/admin/releases", response_class=HTMLResponse)
+    def admin_releases(request: Request):
+        session = _session_or_redirect(request, app)
+        if isinstance(session, RedirectResponse):
+            return session
+        return _render_public(request, store, "history.html")
+
+    @app.get("/admin/dependencies", response_class=HTMLResponse)
+    def admin_dependencies(request: Request):
+        session = _session_or_redirect(request, app)
+        if isinstance(session, RedirectResponse):
+            return session
         return _render_public(request, store, "tools.html")
 
     @app.get("/admin/login", response_class=HTMLResponse)
@@ -409,8 +471,7 @@ def create_app(
             return _login_page(request, app, "Wrong username or password.")
         _clear_failures(ip)
         token_csrf = new_csrf()
-        dest = "/install" if _admin_host(request) else "/admin"
-        response = RedirectResponse(dest, status_code=303)
+        response = RedirectResponse("/admin/install", status_code=303)
         response.set_cookie(
             COOKIE,
             sign_session(app.state.secret, user=app.state.admin_user, csrf=token_csrf),
@@ -433,17 +494,7 @@ def create_app(
         session = _session_or_redirect(request, app)
         if isinstance(session, RedirectResponse):
             return session
-        chosen = _clean_ip(ip)
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "analytics.html",
-            {
-                "selected_ip": chosen,
-                "known": store.list_installations(),
-                "detail": _with_live_analytics(store, chosen),
-                "csrf": str(session.get("csrf") or ""),
-            },
-        )
+        return _analytics_page(request, store, session, ip=ip)
 
     @app.get("/api/admin/installations")
     def installations_api(request: Request, ip: str = "") -> dict:
@@ -457,15 +508,20 @@ def create_app(
         chosen = _clean_ip(ip)
         return {
             "installations": store.list_installations(),
+            "tools": store.tool_install_counts(),
             "selected": _with_live_analytics(store, chosen),
         }
 
-    @app.get("/admin", response_class=HTMLResponse)
-    def admin(request: Request, uploaded: str = "", saved: str = "") -> HTMLResponse:
+    @app.get("/admin")
+    def admin(request: Request):
+        """The old publish page. Sign-in and this address open Install."""
         session = _session_or_redirect(request, app)
         if isinstance(session, RedirectResponse):
             return session
-        return _admin_page(request, app, session, _notice_for(uploaded, saved), "")
+        target = "/admin/install"
+        if request.url.query:
+            target = f"{target}?{request.url.query}"
+        return RedirectResponse(target, status_code=303)
 
     @app.post("/admin/upload", response_class=HTMLResponse)
     def upload(
@@ -477,7 +533,7 @@ def create_app(
         csrf: str = Form(""),
         package: UploadFile = File(...),
     ):
-        session = _require_admin(request, app, csrf)
+        _require_admin(request, app, csrf)
         try:
             mode = (kind or "").strip().lower()
             if mode not in ("", "bundle"):
@@ -489,7 +545,7 @@ def create_app(
             note = _clean_notes(notes)
         except (PackageError, HTTPException) as exc:
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
-            return _admin_again(request, app, session, str(detail))
+            return _publish_again(request, store, str(detail))
         blob = root / "incoming.tmp"
         published_as = ""
         try:
@@ -526,26 +582,29 @@ def create_app(
                 _publish_one(store, blob, key, typed, filename, note)
                 published_as = key
         except PackageError as exc:
-            return _admin_again(request, app, session, str(exc))
+            return _publish_again(request, store, str(exc))
         finally:
             try:
                 blob.unlink()
             except OSError:
                 pass
-        return RedirectResponse(f"/admin?uploaded={published_as}", status_code=303)
+        return RedirectResponse(
+            f"/admin/releases?uploaded={quote(published_as, safe='')}",
+            status_code=303,
+        )
 
     @app.post("/admin/delete")
     def delete(request: Request, platform: str = Form(""), csrf: str = Form("")):
         _require_admin(request, app, csrf)
         key = _package_or_404(platform)
         store.delete(key)
-        return RedirectResponse("/admin", status_code=303)
+        return RedirectResponse("/admin/releases", status_code=303)
 
     @app.post("/admin/copy", response_class=HTMLResponse)
     async def save_page_copy(request: Request):
         form = await request.form()
         csrf = str(form.get("csrf") or "")
-        session = _require_admin(request, app, csrf)
+        _require_admin(request, app, csrf)
         # A page-text save posts every section and no config key. A config
         # save posts the three config keys and no section. Only those keys
         # are written, so one form does not blank the other.
@@ -555,28 +614,33 @@ def create_app(
         config_keys = {key for key, _label, _filename in CONFIGS}
         posted = [key for key in known if key in form]
         if not posted:
-            return _admin_page(
+            return _render_public(
                 request,
-                app,
-                session,
-                "",
-                "Choose page text or a config file to save.",
+                store,
+                "install.html",
+                error="Choose page text or a config file to save.",
                 status_code=400,
             )
         drafts = {key: str(form.get(key) or "") for key in posted}
         try:
             cleaned = {key: clean_body(drafts[key]) for key in posted}
         except CopyError as exc:
-            return _admin_page(request, app, session, "", str(exc), drafts=drafts, status_code=400)
+            return _render_public(
+                request,
+                store,
+                "install.html",
+                error=str(exc),
+                status_code=400,
+            )
         store.save_copy(cleaned)
         saved_as = "config" if config_keys.issuperset(posted) else "text"
-        return RedirectResponse(f"/admin?saved={saved_as}", status_code=303)
+        return RedirectResponse(f"/admin/install?saved={saved_as}", status_code=303)
 
     @app.post("/admin/copy/reset")
     def reset_page_copy(request: Request, csrf: str = Form("")):
         _require_admin(request, app, csrf)
         store.clear_copy()
-        return RedirectResponse("/admin?saved=reset", status_code=303)
+        return RedirectResponse("/admin/install?saved=reset", status_code=303)
 
     @app.post("/admin/copy/one", response_class=HTMLResponse)
     def save_one_copy(
@@ -618,6 +682,29 @@ def _clean_ip(value: str) -> str:
     if not text or len(text) > 64 or any(char in text for char in "\r\n\x00 <>"):
         return ""
     return text
+
+
+def _analytics_page(
+    request: Request,
+    store: ReleaseStore,
+    session: dict,
+    *,
+    ip: str,
+    status_code: int = 200,
+) -> HTMLResponse:
+    chosen = _clean_ip(ip)
+    return _TEMPLATES.TemplateResponse(
+        request,
+        "analytics.html",
+        {
+            "selected_ip": chosen,
+            "known": store.list_installations(),
+            "tools": store.tool_install_counts(),
+            "detail": _with_live_analytics(store, chosen),
+            "csrf": str(session.get("csrf") or ""),
+        },
+        status_code=status_code,
+    )
 
 
 def _clean_client_version(value: str) -> str:
@@ -676,6 +763,7 @@ def _remember_install(
     client_version: str = "",
     published_version: str = "",
 ) -> None:
+    """Store the caller's address. The TCP source port is not a dashboard port."""
     ip = _clean_ip(request.client.host if request.client else "")
     if not ip:
         return
@@ -950,11 +1038,12 @@ def _public_context(
     force_edit: str = "",
     force_slot: str = "",
     return_path: str = "",
+    notice: str | None = None,
+    error: str = "",
 ) -> dict:
     dependency_rows = store.list_dependencies()
     stored = store.copy_map()
     sources = source_map(stored, drafts)
-    intro = stored["deps_intro"] if "deps_intro" in stored else DEFAULTS["deps_intro"]
     inplace = bool(getattr(request.state, "inplace", False))
     session = _session(request, request.app) if inplace else None
     csrf = str(session.get("csrf") or "") if session else ""
@@ -966,13 +1055,18 @@ def _public_context(
         edit_slot = _clean_slot(request.query_params.get("slot") or "")
     else:
         edit_slot = ""
-    path = request.url.path if request.url.path in _PUBLIC_PATHS else "/install"
+    current = request.url.path or "/"
+    if current in _ADMIN_CONTENT_PATHS or current in _PUBLIC_PATHS:
+        path = "/install" if current == "/" else current
+    elif inplace:
+        path = "/admin/install"
+    else:
+        path = "/install"
     return {
         "releases": store.list_all(),
         "dependency_rows": dependency_rows,
         "dependencies": _dependency_groups(dependency_rows, stored),
         "sections": _public_sections(request, store),
-        "cert_url": certificate_url(intro),
         "csrf": csrf,
         "edit_key": edit_key,
         "edit_slot": edit_slot,
@@ -980,6 +1074,16 @@ def _public_context(
         "edit_next": return_path or path,
         "copy_labels": copy_catalog(),
         "copy_sources": sources,
+        "dependency_platforms": DEPENDENCIES,
+        "notice": (
+            _notice_for(
+                str(request.query_params.get("uploaded") or ""),
+                str(request.query_params.get("saved") or ""),
+            )
+            if notice is None and inplace
+            else (notice or "")
+        ),
+        "error": error,
     }
 
 
@@ -994,6 +1098,8 @@ def _render_public(
     force_edit: str = "",
     force_slot: str = "",
     return_path: str = "",
+    notice: str | None = None,
+    error: str = "",
 ) -> HTMLResponse:
     context = _public_context(
         request,
@@ -1003,6 +1109,8 @@ def _render_public(
         force_edit=force_edit,
         force_slot=force_slot,
         return_path=return_path,
+        notice=notice,
+        error=error,
     )
     if template == "history.html":
         context["history"] = store.list_history()
@@ -1021,39 +1129,15 @@ def _public_sections(request: Request, store: ReleaseStore):
         request.url.port,
         request.url.scheme,
     )
-    return public_html(store.copy_map(), tokens)
+    stored = store.copy_map()
+    intro = stored["deps_intro"] if "deps_intro" in stored else DEFAULTS["deps_intro"]
+    tokens["certificate"] = certificate_url(intro) or "#deps-intro"
+    prefix = "/admin" if getattr(request.state, "inplace", False) else ""
+    return public_html(stored, tokens, site_prefix=prefix)
 
 
-def _admin_page(
-    request: Request,
-    app: FastAPI,
-    session: dict,
-    notice: str,
-    error: str,
-    *,
-    drafts: dict[str, str] | None = None,
-    status_code: int = 200,
-) -> HTMLResponse:
-    return _TEMPLATES.TemplateResponse(
-        request,
-        "admin.html",
-        {
-            "releases": app.state.store.list_all(),
-            "dependency_rows": app.state.store.list_dependencies(),
-            "dependency_platforms": DEPENDENCIES,
-            "csrf": session["csrf"],
-            "notice": notice,
-            "error": error,
-            "sections": sections_for_edit(app.state.store.copy_map(), drafts),
-            "configs": configs_for_edit(app.state.store.copy_map(), drafts),
-            "token_help": TOKEN_HELP,
-        },
-        status_code=status_code,
-    )
-
-
-def _admin_again(request: Request, app: FastAPI, session: dict, error: str) -> HTMLResponse:
-    return _admin_page(request, app, session, "", error, status_code=400)
+def _publish_again(request: Request, store: ReleaseStore, error: str) -> HTMLResponse:
+    return _render_public(request, store, "history.html", error=error, status_code=400)
 
 
 def _locked_out(ip: str) -> bool:

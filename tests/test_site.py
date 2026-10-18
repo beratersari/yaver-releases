@@ -62,7 +62,7 @@ def _sign_in(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert signed.status_code == 303
-    assert signed.headers["location"] == "/admin"
+    assert signed.headers["location"] == "/admin/install"
 
 
 def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
@@ -76,6 +76,7 @@ def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
     assert "That command is not a button on the dashboard." in page.text
     assert "start at step 1" not in page.text
     assert "Open Using it from the dashboard and follow the sections inside." in page.text
+    assert "Follow the sections below in order." not in page.text
     assert "Using it on those websites is harder." in page.text
     assert "Using the dashboard is strongly recommended." in page.text
     assert "It is easier." in page.text
@@ -160,7 +161,7 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     releases = client.get("/releases")
     assert releases.status_code == 200
     assert "Release history" in releases.text
-    assert "No release has been published." in releases.text
+    assert "No release has been published yet." in releases.text
     assert "<h1>Release history</h1>" in releases.text
     login = client.get("/admin/login")
     assert login.status_code == 200
@@ -183,6 +184,7 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "Claude Code and Codex are the other workers." in install.text
     assert "You must install OpenCode to use Yaver." not in install.text
     assert "Yaver does not run without this." not in install.text
+    assert install.text.index("<h1>Install Yaver</h1>") < install.text.index("Install the worker selected")
     assert install.text.index("Install the worker selected") < install.text.index('id="windows"')
     install_need = install.text[:install.text.index('id="windows"')]
     assert "The OpenCode version should be" in install_need
@@ -244,7 +246,7 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "No package has been published yet." in tools.text
     assert '<a class="button"' not in tools.text
     assert install.text.count("<h3>Install</h3>") == 5
-    assert install.text.count("<h3>Update</h3>") == 5
+    assert install.text.count("<h3>Update</h3>") == 2
     assert install.text.count("setsid nohup ./yaver start") == 4
     assert "nano .env" not in install.text
     assert "notepad .env" not in install.text
@@ -252,7 +254,7 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     assert "127.0.0.1:8080" not in install.text
     assert ".\\install-agents.bat" in install.text
     assert install.text.count("./install-agents.sh") == 4
-    assert install.text.count("./update.sh") == 4
+    assert install.text.count("./update.sh") == 1
     windows_at = install.text.index('id="windows"')
     windows_update = install.text.index("update.bat")
     ubuntu18 = install.text.index('id="ubuntu-18.04"')
@@ -272,7 +274,9 @@ def test_home_and_health_before_any_upload(tmp_path: Path):
     windows_block = install.text[windows_at:ubuntu18]
     assert windows_block.index("install-agents.bat") < windows_block.index(".\\yaver.exe")
     assert "notepad .env" not in windows_block
-    assert "./update.sh" in ubuntu22_block
+    assert "./update.sh" not in ubuntu22_block
+    assert install.text.index('id="ubuntu-24.04"') < install.text.index("./update.sh")
+    assert "The update command below is the same on each version." in install.text
     assert "yaver-18.04.zip" not in ubuntu22_block
     assert "Start again later" not in install.text
     assert "Start-Process" not in install.text
@@ -399,7 +403,7 @@ def test_classify_executable_source_and_wrapped_folder():
 def test_a_cli_zip_is_a_dependency_and_not_a_yaver_update(tmp_path: Path):
     client = _client(tmp_path)
     _sign_in(client)
-    admin = client.get("/admin")
+    admin = client.get("/admin/releases")
     assert 'value="opencode-windows"' in admin.text
     assert "OpenCode for Windows" in admin.text
     token = _csrf(admin.text)
@@ -460,8 +464,16 @@ def test_upload_requires_login_and_then_publishes(tmp_path: Path):
     assert denied.status_code == 403
 
     _sign_in(client)
+    landed = client.get("/admin", follow_redirects=False)
+    assert landed.status_code == 303
+    assert landed.headers["location"] == "/admin/install"
     admin = client.get("/admin")
     assert admin.status_code == 200
+    assert admin.url.path == "/admin/install"
+    assert "Save page text" not in admin.text
+    assert "Save config files" not in admin.text
+    assert 'href="#page-text"' not in admin.text
+    assert 'href="#config-text"' not in admin.text
     token = _csrf(admin.text)
     payload = _zip(
         {
@@ -809,10 +821,9 @@ def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
     assert denied.status_code == 403
 
     _sign_in(client)
-    admin = client.get("/admin")
+    admin = client.get("/admin/install")
     assert admin.status_code == 200
-    assert "Page text" in admin.text
-    assert "Save page text" in admin.text
+    assert "Save page text" not in admin.text
     token = _csrf(admin.text)
     custom = "Office copy <script>alert(1)</script> [bad](javascript:alert(1))"
     saved = client.post(
@@ -821,7 +832,7 @@ def test_admin_can_replace_page_text_and_restore_it(tmp_path: Path):
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert saved.headers["location"] == "/admin?saved=text"
+    assert saved.headers["location"] == "/admin/install?saved=text"
     history = client.get("/releases")
     assert "Office copy" in history.text
     assert "<script>alert" not in history.text
@@ -982,7 +993,7 @@ def test_release_page_artifacts_start_collapsed(tmp_path: Path):
 def test_bundle_upload_reads_the_version_from_the_zip_names(tmp_path: Path):
     client = _client(tmp_path)
     _sign_in(client)
-    admin = client.get("/admin")
+    admin = client.get("/admin/releases")
     assert 'value="ubuntu-18.04"' not in admin.text
     assert 'name="kind" value="bundle"' in admin.text
     token = _csrf(admin.text)
@@ -999,7 +1010,7 @@ def test_bundle_upload_reads_the_version_from_the_zip_names(tmp_path: Path):
         follow_redirects=False,
     )
     assert published.status_code == 303
-    assert published.headers["location"] == "/admin?uploaded=bundle"
+    assert published.headers["location"] == "/admin/releases?uploaded=bundle"
 
     history = client.get("/releases")
     assert "0.9.79" in history.text
@@ -1372,7 +1383,10 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
 
     _sign_in(client)
     for public in ("/", "/install", "/releases", "/dependencies", "/how-to"):
-        assert 'href="/admin/analytics"' not in client.get(public).text
+        signed_page = client.get(public)
+        assert signed_page.url.path.startswith("/admin/")
+        assert 'href="/admin/analytics"' in signed_page.text
+        assert ">Analytics<" in signed_page.text
     page = client.get("/admin/analytics")
     assert page.status_code == 200
     assert 'href="/admin/analytics"' in page.text
@@ -1382,6 +1396,10 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert 'href="/admin/analytics"' in publish.text
     assert ">Analytics<" in publish.text
     assert "testclient" in page.text
+    assert "How many times each tool was installed." in page.text
+    assert '<span class="num">0</span><span class="lbl">OpenCode</span>' in page.text
+    assert '<span class="lbl">Claude Code</span>' in page.text
+    assert '<span class="lbl">Codex</span>' in page.text
     assert "0.9.80" in page.text
     assert "ubuntu-22.04" in page.text
     assert "Last contact" in page.text
@@ -1402,6 +1420,11 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert posted.status_code == 405
 
     body = client.get("/api/admin/installations?ip=testclient").json()
+    assert {item["id"]: item["installs"] for item in body["tools"]} == {
+        "opencode": 0,
+        "claude": 0,
+        "codex": 0,
+    }
     assert len(body["installations"]) == 1
     row = body["installations"][0]
     assert row["ip"] == "testclient"
@@ -1421,6 +1444,94 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert "www-authenticate" not in {key.lower() for key in denied.headers}
     assert body["selected"]["usage"] is None
     assert body["selected"]["usage_error"] == "This address is not an IP address."
+
+
+def test_tool_downloads_are_counts_and_not_addresses(tmp_path: Path):
+    client = _client(tmp_path)
+    _sign_in(client)
+    token = _csrf(client.get("/admin").text)
+    published = client.post(
+        "/admin/upload",
+        data={"platform": "opencode-windows", "version": "1.18.10", "csrf": token},
+        files={
+            "package": (
+                "opencode-windows.zip",
+                _zip(
+                    {
+                        "install-opencode.bat": "@echo off\r\n",
+                        "opencode/opencode.exe": "bin",
+                        "opencode/opencode.json": "{}\n",
+                        "VERSION": "1.18.10\n",
+                    }
+                ),
+                "application/zip",
+            )
+        },
+        follow_redirects=False,
+    )
+    assert published.status_code == 303
+    assert client.get("/download/opencode-windows").status_code == 200
+    store = client.app.state.store
+    store.record_install_hit(
+        ip="10.1.1.1",
+        kind="download",
+        platform="opencode-linux",
+        published_version="1.18.10",
+    )
+    store.record_install_hit(
+        ip="10.2.2.2",
+        kind="download",
+        platform="claude-windows",
+        published_version="1.0.5",
+    )
+    store.record_install_hit(
+        ip="10.3.3.3",
+        kind="download",
+        platform="codex-linux",
+        published_version="1.0.2",
+    )
+    store.record_install_hit(
+        ip="10.4.4.4",
+        kind="latest",
+        platform="windows",
+        client_version="0.9.81",
+        published_version="0.9.81",
+    )
+    store.record_install_hit(
+        ip="10.4.4.4",
+        kind="download",
+        platform="codex-windows",
+        published_version="1.0.2",
+    )
+
+    page = client.get("/admin/analytics")
+    assert page.status_code == 200
+    assert "10.1.1.1" not in page.text
+    assert "10.2.2.2" not in page.text
+    assert "10.3.3.3" not in page.text
+    assert "testclient" not in page.text
+    assert "10.4.4.4" in page.text
+    assert '<span class="num">2</span><span class="lbl">OpenCode</span>' in page.text
+    assert '<span class="num">1</span><span class="lbl">Claude Code</span>' in page.text
+    assert '<span class="num">2</span><span class="lbl">Codex</span>' in page.text
+    assert "opencode-windows" not in page.text
+    assert "opencode-linux" not in page.text
+
+    hidden = client.get("/admin/analytics?ip=10.1.1.1")
+    assert "No requests from 10.1.1.1" in hidden.text
+    assert "opencode-linux" not in hidden.text
+
+    body = client.get("/api/admin/installations?ip=10.4.4.4").json()
+    assert [row["ip"] for row in body["installations"]] == ["10.4.4.4"]
+    assert {item["id"]: item["installs"] for item in body["tools"]} == {
+        "opencode": 2,
+        "claude": 1,
+        "codex": 2,
+    }
+    assert body["installations"][0]["hits"] == 1
+    assert body["installations"][0]["platform"] == "windows"
+    assert [event["platform"] for event in body["selected"]["events"]] == ["windows"]
+    assert body["selected"]["ip"] == "10.4.4.4"
 
 
 class _InstallServer(ThreadingHTTPServer):
@@ -1588,6 +1699,7 @@ def test_selecting_an_address_gets_that_installs_analytics(tmp_path: Path, monke
         server.server_close()
 
 
+
 def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     client = _client(tmp_path)
     page = client.get("/dependencies")
@@ -1595,9 +1707,9 @@ def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     text = page.text
     head = text[:text.index('id="opencode"')]
     assert "Before anything else" in head
-    assert "The OpenCode version should be" in head
-    assert "<code>1.18.10</code>" in head
-    assert head.index('class="warn"') < head.index("<h3>API key</h3>")
+    assert "The OpenCode version should be" not in head
+    assert "<code>1.18.10</code>" not in head
+    assert 'class="warn"' not in head
     assert "NODE_EXTRA_CA_CERTS" in head
     assert "system variable" in head
     assert "external link in the description" in head
@@ -1615,7 +1727,16 @@ def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     assert "NODE_EXTRA_CA_CERTS=/certs/network-ca.crt" not in head
     assert "New-Item -ItemType Directory -Force -Path C:\\certs" not in head
     assert "mkdir -p /certs" not in head
-    assert '"Machine"' in head
+    from yaver_releases.copy import render_copy
+
+    warned = render_copy("Warning: The OpenCode version should be `1.18.10`.")
+    assert str(warned) == (
+        '<p class="warn" role="note"><strong>Warning</strong>: '
+        "The OpenCode version should be <code>1.18.10</code>.</p>"
+    )
+    assert str(render_copy("[Download it](#deps-intro)")) == '<p><a href="#deps-intro">Download it</a></p>'
+
+    assert "&#34;Machine&#34;" in head
     assert "/etc/environment" in head
     assert head.index("<h3>Windows</h3>") < head.index("<h3>Linux</h3>")
     assert head.index("NODE_EXTRA_CA_CERTS") < head.index("<h3>Windows</h3>")
@@ -1624,9 +1745,12 @@ def test_dependencies_require_the_network_certificate_first(tmp_path: Path):
     assert "apiKeyHelper" not in head
     assert "Set NODE_EXTRA_CA_CERTS as a system variable." not in head
     assert head.index("<h3>API key</h3>") < head.index("<h3>Windows</h3>")
-    assert 'SetEnvironmentVariable("AI_API_KEY", "YOUR_TOKEN", "Machine")' in head
+    assert "Windows. Run PowerShell" not in head
+    assert "Linux. This command" not in head
+    key_cmd = head.index("SetEnvironmentVariable(&#34;AI_API_KEY&#34;, &#34;YOUR_TOKEN&#34;, &#34;Machine&#34;)")
+    sed_cmd = head.index("sed -i &#39;/^AI_API_KEY=/d&#39;")
+    assert windows_h < key_cmd < first_link < linux_h < sed_cmd
     assert "AI_API_KEY=YOUR_TOKEN" in head
-    assert "sed -i '/^AI_API_KEY=/d'" in head
     assert "NODE_EXTRA_CA_CERTS" not in client.get("/install").text
     assert "AI_API_KEY" not in client.get("/install").text
     assert "PRIVATE KEY" not in head
@@ -1781,19 +1905,16 @@ def test_admin_can_edit_sample_configs_without_clearing_page_text(tmp_path: Path
 
     client = _client(tmp_path)
     _sign_in(client)
-    admin = client.get("/admin")
+    admin = client.get("/admin/dependencies")
     assert admin.status_code == 200
-    assert 'href="#config-text"' in admin.text
-    assert 'id="config-text"' in admin.text
-    assert "Save config files" in admin.text
+    assert "Save config files" not in admin.text
+    assert 'id="config-text"' not in admin.text
     shown = html_lib.unescape(admin.text)
-    for key, filename in (
+    for _key, filename in (
         ("config_opencode", "opencode.json"),
         ("config_claude", "settings.json"),
         ("config_codex", "config.toml"),
     ):
-        assert f'name="{key}"' in admin.text
-        assert f'id="copy-{key}"' in admin.text
         assert filename in shown
     assert '"baseURL": "https://YOUR_HOST/v1"' in shown
     assert SAMPLE_CONFIGS["claude"][1].strip() in shown
@@ -1805,7 +1926,7 @@ def test_admin_can_edit_sample_configs_without_clearing_page_text(tmp_path: Path
         follow_redirects=False,
     )
     assert kept.status_code == 303
-    assert kept.headers["location"] == "/admin?saved=text"
+    assert kept.headers["location"] == "/admin/install?saved=text"
     assert '"baseURL": "https://YOUR_HOST/v1"' in html_lib.unescape(client.get("/dependencies").text)
 
     admin = client.get("/admin")
@@ -1817,7 +1938,7 @@ def test_admin_can_edit_sample_configs_without_clearing_page_text(tmp_path: Path
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert saved.headers["location"] == "/admin?saved=config"
+    assert saved.headers["location"] == "/admin/install?saved=config"
     assert "Saved the config files." in client.get(saved.headers["location"]).text
     deps = html_lib.unescape(client.get("/dependencies").text)
     opencode = deps[deps.index('id="sample-opencode"'):deps.index("</textarea>", deps.index('id="sample-opencode"'))]
@@ -1923,8 +2044,56 @@ def test_public_pages_do_not_show_edit_icons(tmp_path: Path):
     for path in ("/install", "/how-to", "/releases", "/dependencies"):
         page = client.get(path)
         assert page.status_code == 200
+        assert page.url.path == path
         assert "copy-edit" not in page.text
         assert 'action="/admin/copy/one"' not in page.text
+        assert 'action="/admin/upload"' not in page.text
+        assert "Save page text" not in page.text
+        assert "Save config files" not in page.text
+
+
+def test_signed_in_pages_use_the_admin_prefix(tmp_path: Path):
+    client = _client(tmp_path)
+    public = client.get("/releases")
+    assert public.status_code == 200
+    assert public.url.path == "/releases"
+    assert 'href="/releases"' in public.text
+    assert 'href="/admin/releases"' not in public.text
+    locked = client.get("/admin/releases", follow_redirects=False)
+    assert locked.status_code == 303
+    assert locked.headers["location"] == "/admin/login"
+
+    _sign_in(client)
+    bounced = client.get("/releases?edit=home_intro", follow_redirects=False)
+    assert bounced.status_code == 302
+    assert bounced.headers["location"] == "/admin/releases?edit=home_intro"
+    assert bounced.headers["cache-control"] == "no-store"
+    root = client.get("/", follow_redirects=False)
+    assert root.status_code == 302
+    assert root.headers["location"] == "/admin/install"
+
+    page = client.get("/releases")
+    assert page.status_code == 200
+    assert page.url.path == "/admin/releases"
+    assert 'href="/admin/releases"' in page.text
+    assert 'aria-current="page"' in page.text
+    assert 'href="/releases"' not in page.text
+    assert 'href="/admin/install"' in page.text
+    install = client.get("/admin/install")
+    assert install.status_code == 200
+    assert install.url.path == "/admin/install"
+    assert 'href="/admin/how-to"' in install.text
+    assert 'href="/admin/dependencies#opencode"' in install.text
+    assert 'href="/how-to"' not in install.text
+    assert 'href="/dependencies#opencode"' not in install.text
+    assert 'data-copy-key="install_intro"' in install.text
+
+    host = _admin_browser(tmp_path)
+    direct = host.get("/admin/releases")
+    assert direct.status_code == 200
+    assert direct.url.path == "/admin/releases"
+    assert "copy-edit" in direct.text
+    assert "Signed in on admin.localhost." in direct.text
 
 
 def test_office_name_sign_in_edits_pages(tmp_path: Path):
@@ -1957,7 +2126,7 @@ def test_office_name_sign_in_edits_pages(tmp_path: Path):
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert saved.headers["location"] == "/how-to#copy-use_settings"
+    assert saved.headers["location"] == "/admin/how-to#copy-use_settings"
     assert "Edited from the office name." in office.get("/how-to").text
 
     prefixed = TestClient(
@@ -1983,7 +2152,7 @@ def test_office_name_sign_in_edits_pages(tmp_path: Path):
         follow_redirects=False,
     )
     assert signed.status_code == 303
-    assert signed.headers["location"] == "/install"
+    assert signed.headers["location"] == "/admin/install"
     edited = prefixed.get("/install")
     assert 'data-copy-key="install_intro"' in edited.text
     assert "Signed in on admin.vdi-07.company.com." in edited.text
@@ -2004,7 +2173,7 @@ def test_admin_localhost_edits_the_block_on_the_page(tmp_path: Path):
     assert 'data-copy-key="use_settings"' in page.text
     assert 'aria-label="Edit 1. Save Settings"' in page.text
     assert "Signed in on admin.localhost." in page.text
-    assert 'href="/admin"' in page.text
+    assert 'href="/admin/releases#publish"' in page.text
     assert 'href="/admin/analytics"' in page.text
     opened = client.get("/how-to?edit=use_settings")
     assert "<textarea" in opened.text
@@ -2022,7 +2191,7 @@ def test_admin_localhost_edits_the_block_on_the_page(tmp_path: Path):
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert saved.headers["location"] == "/how-to#copy-use_settings"
+    assert saved.headers["location"] == "/admin/how-to#copy-use_settings"
     shown = client.get("/how-to")
     assert "Office settings line." in shown.text
     assert "<script>alert" not in shown.text
@@ -2048,7 +2217,7 @@ def test_admin_localhost_save_rejects_a_foreign_return_and_unknown_block(tmp_pat
         follow_redirects=False,
     )
     assert bounced.status_code == 303
-    assert bounced.headers["location"].startswith("/install#")
+    assert bounced.headers["location"].startswith("/admin/install#")
     assert "evil.example" not in bounced.headers["location"]
     denied = client.post(
         "/admin/copy/one",
@@ -2083,7 +2252,7 @@ def test_admin_localhost_edits_one_sample_config(tmp_path: Path):
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert saved.headers["location"].startswith("/dependencies#")
+    assert saved.headers["location"].startswith("/admin/dependencies#")
     body = client.get("/dependencies").text
     assert '"model": "office/model"' in body
     assert "Open this page from the address" in client.get("/install").text
@@ -2107,14 +2276,69 @@ def test_admin_fold_puts_one_edit_on_each_section(tmp_path: Path):
     ubuntu = install[install.index('id="ubuntu-22.04"'):install.index('id="ubuntu-24.04"')]
     assert "copy-edit" not in _summary(ubuntu, "ubuntu-22.04")
     assert ubuntu.index("<h3>Install</h3>") < ubuntu.index('data-copy-key="ubuntu22"')
-    assert ubuntu.index("<h3>Update</h3>") < ubuntu.index('data-copy-key="ubuntu_update"')
-    assert "slot=ubuntu-22.04" in ubuntu
+    assert "<h3>Update</h3>" not in ubuntu
+    assert "slot=" not in ubuntu
+    update = install[install.index('id="ubuntu-update"'):]
+    assert update.index("<h3>Update</h3>") < update.index('data-copy-key="ubuntu_update"')
+    assert update.count('data-copy-key="ubuntu_update"') == 1
     tools = client.get("/dependencies").text
     opencode = tools[tools.index('id="opencode"'):tools.index('id="claude"')]
     assert "copy-edit" not in _summary(opencode, "opencode")
     assert opencode.index("<h3>Windows</h3>") < opencode.index('data-copy-key="opencode_windows"')
     assert opencode.index('data-copy-key="opencode_windows"') < opencode.index("<h3>Linux</h3>")
     assert opencode.index("<h3>Linux</h3>") < opencode.index('data-copy-key="opencode_linux"')
+    assert opencode.count('data-copy-key="opencode_warning"') == 1
+    assert "copy-edit" not in _summary(tools, "claude")
+    assert "copy-edit" not in _summary(tools, "codex")
+
+    before_windows = install[:install.index('id="windows"')]
+    assert before_windows.count('data-copy-key="install_workers"') == 1
+    assert before_windows.count('data-copy-key="install_howto"') == 1
+    assert before_windows.count('data-copy-key="install_intro"') == 1
+    assert before_windows.count('class="copy-edit"') == 3
+
+    how = client.get("/how-to").text
+    assert "copy-edit" not in _summary(how, "from-dashboard")
+    assert "copy-edit" not in _summary(how, "dash-settings")
+    assert "copy-edit" not in _summary(how, "from-external")
+    assert "Follow the sections below in order." not in how
+    assert 'data-copy-key="use_dash"' not in how
+    settings = how[how.index('id="dash-settings"'):how.index('id="dash-scheduled"')]
+    assert settings.index("</summary>") < settings.index('data-copy-key="use_settings"')
+    banner = how[:how.index('id="from-dashboard"')]
+    assert banner.count('data-copy-key="use_dashboard"') == 1
+    assert banner.count('class="copy-edit"') == 1
+
+    head = tools[:tools.index('id="deps-intro"')]
+    for key in ("deps_cert", "deps_api_key", "deps_cert_windows", "deps_cert_linux"):
+        assert head.count(f'data-copy-key="{key}"') == 1
+    assert head.count('class="copy-edit"') == 4
+    assert tools.count('data-copy-key="deps_intro"') == 1
+
+
+def test_open_editor_hides_that_blocks_edit_button(tmp_path: Path):
+    """Save and Cancel replace Edit on the block that is open."""
+    client = _admin_browser(tmp_path)
+    opened = client.get("/install?edit=install_intro")
+    assert "<textarea" in opened.text
+    assert 'data-copy-key="install_intro"' not in opened.text
+    assert 'data-copy-key="install_howto"' in opened.text
+    assert 'data-copy-key="windows"' in opened.text
+    assert 'name="key" value="install_intro"' in opened.text
+
+    dashboard = client.get("/how-to?edit=use_settings")
+    assert "<textarea" in dashboard.text
+    assert 'data-copy-key="use_settings"' not in dashboard.text
+    assert 'data-copy-key="use_dashboard"' in dashboard.text
+    assert 'data-copy-key="use_intro"' in dashboard.text
+
+    sample = client.get("/dependencies?edit=config_opencode")
+    assert "<textarea" in sample.text
+    assert 'data-copy-key="config_opencode"' not in sample.text
+    assert 'data-copy-target="sample-opencode"' not in sample.text
+    assert 'data-copy-target="sample-claude"' in sample.text
+    assert 'data-copy-key="opencode_windows"' in sample.text
+    assert 'data-copy-key="opencode_warning"' in sample.text
 
 
 def test_admin_localhost_without_a_password_stays_public(tmp_path: Path):
