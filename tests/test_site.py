@@ -8,6 +8,7 @@ import hmac
 import io
 import json
 import os
+import socket
 import threading
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +19,7 @@ from fastapi.testclient import TestClient
 
 from yaver_releases.app import create_app
 from yaver_releases.install_fetch import INSTALL_ANALYTICS_TOKEN
+import yaver_releases.install_fetch as install_fetch
 from yaver_releases.dotenv import load_dotenv
 from yaver_releases.platforms import classify_members, flatten_wrapper, updater_bytes
 
@@ -1396,6 +1398,9 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert 'href="/admin/analytics"' in publish.text
     assert ">Analytics<" in publish.text
     assert "testclient" in page.text
+    assert f"testclient:{install_fetch.INSTALL_ANALYTICS_PORT}" in page.text
+    assert ">Name</th>" in page.text
+    assert ">Address</th>" in page.text
     assert "How many times each tool was installed." in page.text
     assert '<span class="num">0</span><span class="lbl">OpenCode</span>' in page.text
     assert '<span class="lbl">Claude Code</span>' in page.text
@@ -1406,6 +1411,10 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert "&lt;script&gt;" not in page.text
     chosen = client.get("/admin/analytics?ip=testclient")
     assert chosen.status_code == 200
+    assert 'action="/admin/analytics/label"' in chosen.text
+    assert 'id="install-name"' in chosen.text
+    assert "Dashboard port" not in chosen.text
+    assert 'id="install-port"' not in chosen.text
     assert "Version check" in chosen.text
     assert "ubuntu-22.04" in chosen.text
     assert "Version " in chosen.text
@@ -1428,9 +1437,14 @@ def test_version_checks_are_listed_by_address_for_an_admin(tmp_path: Path):
     assert len(body["installations"]) == 1
     row = body["installations"][0]
     assert row["ip"] == "testclient"
+    assert row["name"] == ""
+    assert row["port"] == install_fetch.INSTALL_ANALYTICS_PORT
+    assert row["address"] == f"testclient:{install_fetch.INSTALL_ANALYTICS_PORT}"
     assert row["hits"] == 3
     assert row["client_version"] == "0.9.80"
     assert row["platform"] == "ubuntu-22.04"
+    assert body["selected"]["name"] == ""
+    assert body["selected"]["port"] == install_fetch.INSTALL_ANALYTICS_PORT
     assert body["selected"]["events"][0]["client_version"] == "0.9.80"
     assert all("<" not in event["client_version"] for event in body["selected"]["events"])
     assert "usage" not in row
@@ -1698,6 +1712,218 @@ def test_selecting_an_address_gets_that_installs_analytics(tmp_path: Path, monke
         server.shutdown()
         server.server_close()
 
+
+def _closed_port() -> int:
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = int(sock.getsockname()[1])
+    sock.close()
+    return port
+
+
+def test_a_version_check_can_report_its_dashboard_port(tmp_path: Path):
+    client = _client(tmp_path)
+    assert client.get("/api/latest?platform=opencode-windows&port=9090").status_code == 404
+    assert client.get("/api/latest?platform=windows&current=0.9.81&port=9090").status_code == 404
+    client.get("/api/latest?platform=windows&port=nope")
+    client.get("/api/latest?platform=windows&port=0")
+    client.get("/api/latest?platform=windows&port=65536")
+    client.get("/api/latest?platform=windows")
+    _sign_in(client)
+    listed = client.get("/api/admin/installations").json()["installations"]
+    assert [row["ip"] for row in listed] == ["testclient"]
+    assert listed[0]["name"] == ""
+    assert listed[0]["port"] == 9090
+    assert listed[0]["address"] == "testclient:9090"
+    assert "testclient:9090" in client.get("/admin/analytics").text
+
+    token = _csrf(client.get("/admin/analytics?ip=testclient").text)
+    renamed = client.post(
+        "/admin/analytics/label",
+        data={"ip": "testclient", "name": "Bench", "port": "9000", "csrf": token},
+        follow_redirects=False,
+    )
+    assert renamed.status_code == 303
+    assert renamed.headers["location"] == "/admin/analytics?ip=testclient"
+    held = client.get("/api/admin/installations").json()["installations"][0]
+    assert held["name"] == "Bench"
+    assert held["port"] == 9090
+    assert held["address"] == "testclient:9090"
+    client.get("/api/latest?platform=windows&port=9091")
+    body = client.get("/api/admin/installations?ip=testclient").json()
+    assert body["installations"][0]["name"] == "Bench"
+    assert body["installations"][0]["port"] == 9091
+    assert body["selected"]["name"] == "Bench"
+    assert body["selected"]["address"] == "testclient:9091"
+    assert "usage" not in body["installations"][0]
+
+
+def test_an_admin_names_an_install_without_changing_its_port(tmp_path: Path):
+    client = _client(tmp_path)
+    _remember(client, "127.0.0.1")
+    client.app.state.store.record_install_hit(
+        ip="::1",
+        kind="latest",
+        platform="ubuntu-22.04",
+        client_version="0.9.80",
+        published_version="0.9.81",
+    )
+    client.app.state.store.set_install_port(ip="::1", port=9090)
+    client.app.state.store.record_install_hit(
+        ip="10.8.8.8",
+        kind="download",
+        platform="codex-linux",
+        published_version="1.0.2",
+    )
+    _sign_in(client)
+    default_port = install_fetch.INSTALL_ANALYTICS_PORT
+    page = client.get("/admin/analytics")
+    assert f"127.0.0.1:{default_port}" in page.text
+    assert "[::1]:9090" in page.text
+    assert 'href="/admin/analytics?ip=::1"' in page.text
+    assert "<td>—</td>" in page.text
+    assert "10.8.8.8" not in page.text
+    assert 'action="/admin/analytics/label"' not in page.text
+
+    opened = client.get("/admin/analytics?ip=127.0.0.1")
+    assert f"Could not reach this install on port {default_port}." in opened.text
+    assert 'action="/admin/analytics/label"' in opened.text
+    assert 'id="install-port"' not in opened.text
+    token = _csrf(opened.text)
+    closed = _closed_port()
+    assert closed != default_port
+    saved = client.post(
+        "/admin/analytics/label",
+        data={"ip": "127.0.0.1", "name": "  Office   desk  ", "port": str(closed), "csrf": token},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/admin/analytics?ip=127.0.0.1"
+    shown = client.get("/admin/analytics?ip=127.0.0.1")
+    assert "<h2>Office desk</h2>" in shown.text
+    assert f"127.0.0.1:{default_port}" in shown.text
+    assert f"127.0.0.1:{closed}" not in shown.text
+    assert "<td>Office desk</td>" in shown.text
+    assert f"Office desk · 127.0.0.1:{default_port} · 0.9.81 · windows" in shown.text
+    assert f"Could not reach this install on port {default_port}." in shown.text
+    row = client.get("/api/admin/installations").json()["installations"]
+    saved_row = next(item for item in row if item["ip"] == "127.0.0.1")
+    assert saved_row["name"] == "Office desk"
+    assert saved_row["port"] == default_port
+    assert saved_row["address"] == f"127.0.0.1:{default_port}"
+    assert "usage" not in saved_row
+
+    other = 1 if closed != 1 else 2
+    client.app.state.store.set_install_port(ip="127.0.0.1", port=other)
+    assert (
+        next(
+            item["port"]
+            for item in client.get("/api/admin/installations").json()["installations"]
+            if item["ip"] == "127.0.0.1"
+        )
+        == other
+    )
+
+    token = _csrf(shown.text)
+    rejected = client.post(
+        "/admin/analytics/label",
+        data={"ip": "127.0.0.1", "name": "A <b>name</b>", "port": "70000", "csrf": token},
+    )
+    assert rejected.status_code == 400
+    assert "cannot include" in rejected.text
+    assert "<b>" not in rejected.text
+    assert "&lt;b&gt;" in rejected.text
+    assert "1 to 65535" not in rejected.text
+    assert 'id="install-port"' not in rejected.text
+    long_name = "N" * 81
+    too_long = client.post(
+        "/admin/analytics/label",
+        data={"ip": "127.0.0.1", "name": long_name, "csrf": token},
+    )
+    assert too_long.status_code == 400
+    assert "80 characters" in too_long.text
+    assert long_name in too_long.text
+    kept = next(
+        item
+        for item in client.get("/api/admin/installations").json()["installations"]
+        if item["ip"] == "127.0.0.1"
+    )
+    assert kept["name"] == "Office desk"
+    assert kept["port"] == other
+
+    missing = client.post(
+        "/admin/analytics/label",
+        data={"ip": "10.9.9.9", "name": "Hidden", "port": "8080", "csrf": token},
+    )
+    assert missing.status_code == 400
+    assert "not an installation" in missing.text
+    assert "10.9.9.9" not in missing.text
+    tool = client.post(
+        "/admin/analytics/label",
+        data={"ip": "10.8.8.8", "name": "Tool", "port": "8080", "csrf": token},
+    )
+    assert tool.status_code == 400
+    assert "10.8.8.8" not in tool.text
+    assert client.post(
+        "/admin/analytics/label",
+        data={"ip": "127.0.0.1", "name": "Office desk", "port": str(closed), "csrf": "nope"},
+    ).status_code == 403
+    outsider = TestClient(client.app)
+    assert (
+        outsider.post(
+            "/admin/analytics/label",
+            data={"ip": "127.0.0.1", "name": "Office desk", "port": str(closed), "csrf": token},
+        ).status_code
+        == 403
+    )
+    assert 'action="/admin/analytics/label"' not in outsider.get("/").text
+
+    token = _csrf(client.get("/admin/analytics?ip=127.0.0.1").text)
+    cleared = client.post(
+        "/admin/analytics/label",
+        data={"ip": "127.0.0.1", "name": "   ", "csrf": token},
+    )
+    assert cleared.status_code == 200
+    assert f"<h2>127.0.0.1:{other}</h2>" in cleared.text
+    assert "<td>—</td>" in cleared.text
+    assert "Office desk" not in cleared.text
+
+
+def test_analytics_uses_the_port_reported_by_that_install(tmp_path: Path):
+    server = _InstallServer(("127.0.0.1", 0), _InstallHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    client = _client(tmp_path)
+    _remember(client, "127.0.0.1")
+    _sign_in(client)
+    try:
+        before = client.get("/admin/analytics?ip=127.0.0.1")
+        assert server.seen == []
+        assert (
+            f"Could not reach this install on port {install_fetch.INSTALL_ANALYTICS_PORT}."
+            in before.text
+        )
+        client.app.state.store.set_install_port(ip="127.0.0.1", port=port)
+        token = _csrf(before.text)
+        saved = client.post(
+            "/admin/analytics/label",
+            data={"ip": "127.0.0.1", "name": "Bench", "port": "1", "csrf": token},
+            follow_redirects=False,
+        )
+        assert saved.status_code == 303
+        page = client.get("/admin/analytics?ip=127.0.0.1")
+        assert len(server.seen) == 1
+        assert server.seen[0][0] == "GET"
+        assert server.seen[0][1] == "/api/analytics/install"
+        assert "<h2>Bench</h2>" in page.text
+        assert f"127.0.0.1:{port}" in page.text
+        assert ">17<" in page.text
+        assert f"Could not reach this install on port {install_fetch.INSTALL_ANALYTICS_PORT}." not in page.text
+        assert INSTALL_ANALYTICS_TOKEN not in page.text
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_dependencies_require_the_network_certificate_first(tmp_path: Path):

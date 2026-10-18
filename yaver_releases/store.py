@@ -14,6 +14,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from yaver_releases.install_fetch import effective_listen_port, format_install_address
 from yaver_releases.platforms import DEPENDENCIES, PLATFORMS, ensure_updater, package_label
 
 
@@ -115,6 +116,16 @@ class ReleaseStore:
                     ip TEXT PRIMARY KEY,
                     reported_at TEXT NOT NULL,
                     payload TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS install_labels (
+                    ip TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    port INTEGER NOT NULL,
+                    port_fixed INTEGER NOT NULL
                 )
                 """
             )
@@ -469,6 +480,42 @@ class ReleaseStore:
                 (ip, _now(), text),
             )
 
+    def save_install_label(self, *, ip: str, name: str) -> None:
+        """Store the name an admin set for one address.
+
+        The dashboard port is not part of this save. A version check is the
+        only writer of that port.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO install_labels (ip, name, port, port_fixed)
+                VALUES (?, ?, ?, 0)
+                ON CONFLICT(ip) DO UPDATE SET
+                    name = excluded.name
+                """,
+                (ip, name, effective_listen_port(None)),
+            )
+
+    def set_install_port(self, *, ip: str, port: int) -> None:
+        """Remember the dashboard port a version check reported.
+
+        The name stays as the admin left it. The next check replaces the port.
+        """
+        if isinstance(port, bool) or not isinstance(port, int) or port < 1 or port > 65535:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO install_labels (ip, name, port, port_fixed)
+                VALUES (?, '', ?, 0)
+                ON CONFLICT(ip) DO UPDATE SET
+                    port = excluded.port,
+                    port_fixed = 0
+                """,
+                (ip, port),
+            )
+
     def list_installations(self) -> list[dict]:
         """One Yaver address per row, most recently seen first.
 
@@ -493,9 +540,17 @@ class ReleaseStore:
                 """,
                 platforms,
             ).fetchall()
+            labels = {
+                str(item["ip"]): item
+                for item in conn.execute(
+                    "SELECT ip, name, port FROM install_labels"
+                ).fetchall()
+            }
         # Counts come from a live GET when an admin selects one address.
         # A stored install_usage row is not the list.
-        return [self._installation_summary(row) for row in rows]
+        return [
+            self._installation_summary(row, labels.get(str(row["ip"]))) for row in rows
+        ]
 
     def tool_install_counts(self) -> list[dict]:
         """How many times OpenCode, Claude Code, and Codex were downloaded."""
@@ -618,9 +673,24 @@ class ReleaseStore:
         return found
 
     @staticmethod
-    def _installation_summary(row: sqlite3.Row) -> dict:
+    def _installation_summary(row: sqlite3.Row, label: sqlite3.Row | None = None) -> dict:
+        name = ""
+        stored: int | None = None
+        if label is not None:
+            name = str(label["name"] or "")
+            try:
+                number = int(label["port"])
+            except (TypeError, ValueError):
+                number = 0
+            if not isinstance(label["port"], bool) and 1 <= number <= 65535:
+                stored = number
+        port = effective_listen_port(stored)
+        ip = str(row["ip"])
         return {
-            "ip": str(row["ip"]),
+            "ip": ip,
+            "name": name,
+            "port": port,
+            "address": format_install_address(ip, port),
             "hits": int(row["hits"]),
             "first_seen": str(row["first_seen"]),
             "last_seen": str(row["seen_at"]),

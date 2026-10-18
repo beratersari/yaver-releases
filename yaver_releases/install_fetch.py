@@ -1,9 +1,10 @@
 """Load one install's Analytics when a release admin selects its address.
 
 The version check does not carry these counts. This module GETs
-``http://{ip}:8080/api/analytics/install`` with the same built-in bearer
-Yaver checks. The token is not an operator setting. Do not log it, and
-do not put it on a query string.
+``http://{ip}:{port}/api/analytics/install`` with the same built-in bearer
+Yaver checks. ``port`` is that install's dashboard port and defaults to
+8080. The token is not an operator setting. Do not log it, and do not put
+it on a query string.
 """
 
 from __future__ import annotations
@@ -126,15 +127,39 @@ def _callable_host(ip: str) -> tuple[str, str]:
     return host, ""
 
 
-def analytics_url(ip: str) -> str:
+def effective_listen_port(port: int | None = None) -> int:
+    """Dashboard port to call. ``None`` uses the default, which tests may replace."""
+    chosen = INSTALL_ANALYTICS_PORT if port is None else port
+    if isinstance(chosen, bool) or not isinstance(chosen, int):
+        return 0
+    if chosen < 1 or chosen > 65535:
+        return 0
+    return chosen
+
+
+def format_install_address(ip: str, port: int) -> str:
+    """``ip:port`` for the admin list. IPv6 is shown in brackets."""
+    text = (ip or "").strip()
+    try:
+        parsed = ipaddress.ip_address(text)
+    except ValueError:
+        host = text
+    else:
+        host = parsed.compressed
+        if parsed.version == 6:
+            host = f"[{host}]"
+    return f"{host}:{port}"
+
+
+def analytics_url(ip: str, port: int | None = None) -> str:
     """Absolute URL for one install, or ``""`` when that address is not called."""
     host, error = _callable_host(ip)
     if error or not host:
         return ""
-    port = INSTALL_ANALYTICS_PORT
-    if isinstance(port, bool) or not isinstance(port, int) or port < 1 or port > 65535:
+    listen = effective_listen_port(port)
+    if not listen:
         return ""
-    return f"http://{host}:{port}/api/analytics/install"
+    return f"http://{host}:{listen}/api/analytics/install"
 
 
 def _read_capped(response: httpx.Response) -> bytes | None:
@@ -148,20 +173,21 @@ def _read_capped(response: httpx.Response) -> bytes | None:
     return b"".join(chunks)
 
 
-def fetch_install_analytics(ip: str) -> tuple[dict | None, str]:
+def fetch_install_analytics(ip: str, port: int | None = None) -> tuple[dict | None, str]:
     """GET one install. ``error`` is empty when ``usage`` is present.
 
     Call this only for an address already stored from a version check.
-    A hostname, a link-local address, or any other non-callable IP is
-    refused here as well, before a socket opens.
+    ``port`` is that install's dashboard port. A hostname, a link-local
+    address, or any other non-callable IP is refused here as well, before
+    a socket opens.
     """
     host, error = _callable_host(ip)
     if error:
         return None, error
-    port = INSTALL_ANALYTICS_PORT
-    if isinstance(port, bool) or not isinstance(port, int) or port < 1 or port > 65535:
+    listen = effective_listen_port(port)
+    if not listen:
         return None, "Could not reach this install."
-    url = f"http://{host}:{port}/api/analytics/install"
+    url = f"http://{host}:{listen}/api/analytics/install"
     # INTENTIONAL: verify=False. http only, redirects are not followed,
     # and trust_env keeps the bearer off a corporate proxy.
     timeout = httpx.Timeout(5.0, connect=3.0)
@@ -196,7 +222,7 @@ def fetch_install_analytics(ip: str) -> tuple[dict | None, str]:
                 raw = _read_capped(response)
     except Exception as exc:
         _LOG.info("Install analytics request failed: %s", type(exc).__name__)
-        return None, f"Could not reach this install on port {port}."
+        return None, f"Could not reach this install on port {listen}."
     if raw is None:
         return None, "This install returned analytics that were too large."
     try:

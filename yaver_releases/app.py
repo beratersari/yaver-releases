@@ -344,8 +344,10 @@ def create_app(
         }
 
     @app.get("/api/latest")
-    def latest(request: Request, platform: str = "", current: str = "") -> dict:
-        return _serve_latest(store, request, platform, current)
+    def latest(
+        request: Request, platform: str = "", current: str = "", port: str = ""
+    ) -> dict:
+        return _serve_latest(store, request, platform, current, port)
 
     @app.get("/download/{platform}/{version}")
     def download_version(platform: str, version: str, request: Request) -> FileResponse:
@@ -495,6 +497,42 @@ def create_app(
         if isinstance(session, RedirectResponse):
             return session
         return _analytics_page(request, store, session, ip=ip)
+
+    @app.post("/admin/analytics/label", response_class=HTMLResponse)
+    def save_analytics_label(
+        request: Request,
+        ip: str = Form(""),
+        name: str = Form(""),
+        csrf: str = Form(""),
+    ):
+        session = _require_admin(request, app, csrf)
+        chosen = _known_install_ip(store, ip)
+        if not chosen:
+            return _analytics_page(
+                request,
+                store,
+                session,
+                ip="",
+                label_error="That address is not an installation.",
+                status_code=400,
+            )
+        try:
+            cleaned_name = _clean_install_name(name)
+        except ValueError as exc:
+            return _analytics_page(
+                request,
+                store,
+                session,
+                ip=chosen,
+                label_error=str(exc),
+                label_name=name,
+                status_code=400,
+            )
+        store.save_install_label(ip=chosen, name=cleaned_name)
+        return RedirectResponse(
+            "/admin/analytics?ip=" + quote(chosen, safe=""),
+            status_code=303,
+        )
 
     @app.get("/api/admin/installations")
     def installations_api(request: Request, ip: str = "") -> dict:
@@ -684,12 +722,41 @@ def _clean_ip(value: str) -> str:
     return text
 
 
+def _port_number(value: str) -> int | None:
+    text = (value or "").strip()
+    if not text.isdigit() or len(text) > 5:
+        return None
+    number = int(text)
+    if number < 1 or number > 65535:
+        return None
+    return number
+
+
+def _clean_install_name(value: str) -> str:
+    text = (value or "").replace("\x00", "").replace("\r", " ").replace("\n", " ")
+    text = " ".join(text.split())
+    if "<" in text or ">" in text:
+        raise ValueError("The name cannot include < or >.")
+    if len(text) > 80:
+        raise ValueError("The name must be 80 characters or fewer.")
+    return text
+
+
+def _known_install_ip(store: ReleaseStore, value: str) -> str:
+    chosen = _clean_ip(value)
+    if not chosen or store.installation_detail(chosen) is None:
+        return ""
+    return chosen
+
+
 def _analytics_page(
     request: Request,
     store: ReleaseStore,
     session: dict,
     *,
     ip: str,
+    label_error: str = "",
+    label_name: str | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
     chosen = _clean_ip(ip)
@@ -702,6 +769,8 @@ def _analytics_page(
             "tools": store.tool_install_counts(),
             "detail": _with_live_analytics(store, chosen),
             "csrf": str(session.get("csrf") or ""),
+            "label_error": label_error,
+            "label_name": label_name,
         },
         status_code=status_code,
     )
@@ -724,7 +793,10 @@ def _with_live_analytics(store: ReleaseStore, ip: str) -> dict | None:
         return None
     out = dict(detail)
     out.pop("usage", None)
-    usage, error = fetch_install_analytics(str(out.get("ip") or ""))
+    listen = out.get("port")
+    if isinstance(listen, bool) or not isinstance(listen, int):
+        listen = None
+    usage, error = fetch_install_analytics(str(out.get("ip") or ""), listen)
     out["usage"] = usage
     out["usage_error"] = error
     return out
@@ -735,6 +807,7 @@ def _serve_latest(
     request: Request,
     platform: str,
     current: str,
+    port: str = "",
 ) -> dict:
     key = _platform_or_404(platform)
     row = store.get(key)
@@ -746,6 +819,7 @@ def _serve_latest(
         platform=key,
         client_version=_clean_client_version(current),
         published_version=published,
+        listen_port=_port_number(port),
     )
     if row is None or not published:
         raise HTTPException(
@@ -762,8 +836,13 @@ def _remember_install(
     platform: str,
     client_version: str = "",
     published_version: str = "",
+    listen_port: int | None = None,
 ) -> None:
-    """Store the caller's address. The TCP source port is not a dashboard port."""
+    """Store the caller's address.
+
+    ``listen_port`` is the dashboard port when a version check sends one.
+    The TCP source port changes on every connection, so it is not used.
+    """
     ip = _clean_ip(request.client.host if request.client else "")
     if not ip:
         return
@@ -775,6 +854,8 @@ def _remember_install(
             client_version=client_version,
             published_version=published_version,
         )
+        if listen_port is not None and platform in PLATFORMS:
+            store.set_install_port(ip=ip, port=listen_port)
     except Exception as exc:
         _LOG.warning("Could not record install request: %s", exc)
 

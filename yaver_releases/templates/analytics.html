@@ -3,7 +3,7 @@
 {% block body %}
 <p class="kicker">Admin</p>
 <h1>Analytics</h1>
-<p class="lede">Each address is one Yaver install. Select it to load that install’s jobs, merge requests, and the other Analytics counts, with its version, platform, and last contact.</p>
+<p class="lede">Each address is one Yaver install, shown with its dashboard port. Select an install to give it a name and to load its jobs, merge requests, and the other Analytics counts, with its version, platform, and last contact.</p>
 <p><a href="/admin/releases#publish">Back to publish</a></p>
 
 <h2>Tools</h2>
@@ -14,6 +14,9 @@
   {% endfor %}
 </div>
 
+{% if label_error and not detail %}
+<p class="error">{{ label_error }}</p>
+{% endif %}
 {% if not known %}
 <p class="quiet">No installation has asked for a release yet.</p>
 {% else %}
@@ -23,7 +26,7 @@
     <option value="">All addresses</option>
     {% for row in known %}
     <option value="{{ row.ip }}" {% if row.ip == selected_ip %}selected{% endif %}>
-      {{ row.ip }}{% if row.client_version %} · {{ row.client_version }}{% endif %}{% if row.platform %} · {{ row.platform }}{% endif %}
+      {% if row.name %}{{ row.name }} · {% endif %}{{ row.address }}{% if row.client_version %} · {{ row.client_version }}{% endif %}{% if row.platform %} · {{ row.platform }}{% endif %}
     </option>
     {% endfor %}
   </select>
@@ -33,6 +36,7 @@
 <table>
   <thead>
     <tr>
+      <th>Name</th>
       <th>Address</th>
       <th>Version</th>
       <th>Platform</th>
@@ -42,7 +46,8 @@
   <tbody>
     {% for row in known %}
     <tr>
-      <td><a href="/admin/analytics?ip={{ row.ip }}">{{ row.ip }}</a></td>
+      <td>{% if row.name %}{{ row.name }}{% else %}—{% endif %}</td>
+      <td><a href="/admin/analytics?ip={{ row.ip }}">{{ row.address }}</a></td>
       <td>{{ row.client_version or "—" }}</td>
       <td>{{ row.platform or "—" }}</td>
       <td>{{ row.last_seen }}</td>
@@ -57,8 +62,16 @@
 {% endif %}
 
 {% if detail %}
-<h2>{{ detail.ip }}</h2>
-<p class="quiet">Version {{ detail.client_version or "—" }}. Platform {{ detail.platform or "—" }}. Last contact {{ detail.last_seen }}.</p>
+<h2>{% if detail.name %}{{ detail.name }}{% else %}{{ detail.address }}{% endif %}</h2>
+<p class="quiet">{% if detail.name %}{{ detail.address }}. {% endif %}Version {{ detail.client_version or "—" }}. Platform {{ detail.platform or "—" }}. Last contact {{ detail.last_seen }}.</p>
+{% if label_error %}<p class="error">{{ label_error }}</p>{% endif %}
+<form class="panel" method="post" action="/admin/analytics/label" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="ip" value="{{ detail.ip }}">
+  <label for="install-name">Name</label>
+  <input id="install-name" name="name" maxlength="80" autocomplete="off" spellcheck="false" value="{{ label_name if label_name is not none else detail.name }}">
+  <p><button type="submit">Save</button></p>
+</form>
 {% if not detail.usage %}
 <p class="quiet">{{ detail.usage_error or "Could not read Analytics from this install." }}</p>
 {% else %}
