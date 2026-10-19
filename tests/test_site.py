@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from yaver_releases.app import create_app
-from yaver_releases.install_fetch import INSTALL_ANALYTICS_TOKEN
+from yaver_releases.install_fetch import INSTALL_ANALYTICS_TOKEN, clean_usage
 import yaver_releases.install_fetch as install_fetch
 from yaver_releases.dotenv import load_dotenv
 from yaver_releases.platforms import classify_members, flatten_wrapper, updater_bytes
@@ -65,6 +65,71 @@ def _sign_in(client: TestClient) -> None:
     )
     assert signed.status_code == 303
     assert signed.headers["location"] == "/admin/install"
+
+
+def test_analytics_error_button_lists_the_job_message(tmp_path: Path, monkeypatch):
+    app = create_app(
+        data_dir=tmp_path / "data",
+        admin_user="admin",
+        admin_password="correct-horse",
+        secret="test-secret",
+    )
+    app.state.store.record_install_hit(
+        ip="10.1.2.3",
+        kind="latest",
+        platform="windows",
+        client_version="0.9.88",
+    )
+    usage = clean_usage(
+        {
+            "jobs": 1,
+            "error": 1,
+            "errors_omitted": 2,
+            "errors": [
+                {
+                    "job_id": "job_abc",
+                    "issue_key": "KAN-2",
+                    "summary": "plan the login",
+                    "status": "error",
+                    "category": "Plan",
+                    "source": "jira",
+                    "backend": "opencode",
+                    "agent": "derman-plan",
+                    "model": "opencode/deepseek",
+                    "repository": "https://gitlab.example/group/app",
+                    "started_at": "2026-10-19T10:00:00",
+                    "error_message": "clone failed\n<tag>certificate</tag>",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        "yaver_releases.app.fetch_install_analytics",
+        lambda ip, port=None: (usage, ""),
+    )
+    client = TestClient(app)
+    _sign_in(client)
+    page = client.get("/admin/analytics?ip=10.1.2.3")
+    assert page.status_code == 200
+    assert 'id="error-count"' in page.text
+    assert 'aria-controls="error-jobs"' in page.text
+    assert 'id="error-jobs"' in page.text
+    assert "plan the login" in page.text
+    assert "KAN-2" in page.text
+    assert "clone failed" in page.text
+    assert "certificate" in page.text
+    assert "<tag>certificate</tag>" not in page.text
+    assert "&lt;tag&gt;certificate&lt;/tag&gt;" in page.text
+    assert "2 older error jobs are not listed." in page.text
+
+    stale = clean_usage({"jobs": 3, "error": 3})
+    monkeypatch.setattr(
+        "yaver_releases.app.fetch_install_analytics",
+        lambda ip, port=None: (stale, ""),
+    )
+    old = client.get("/admin/analytics?ip=10.1.2.3")
+    assert old.status_code == 200
+    assert "This install did not send error messages." in old.text
 
 
 def test_how_to_page_walks_through_plan_build_and_review(tmp_path: Path):
@@ -1571,7 +1636,7 @@ class _InstallHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         if server.mode == "huge":
-            raw = b'{"jobs":999,"pad":"' + (b"x" * 70000) + b'"}'
+            raw = b'{"jobs":999,"pad":"' + (b"x" * (520 * 1024)) + b'"}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))

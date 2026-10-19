@@ -12,13 +12,18 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import re
 
 import httpx
 
 # Same value as src/dashboard/install_analytics.py in the Yaver repo.
 INSTALL_ANALYTICS_TOKEN = "c4e8a1b7d2f6093c5e8a4b1d7f0c6e9a2b5d8f1c4e7a0b3d6f9c2e5a8b1d4f70"
 INSTALL_ANALYTICS_PORT = 8080
-_MAX_BODY = 65536
+# Forty error jobs, each with a 2000-character message, plus the count report.
+_MAX_BODY = 512 * 1024
+_ERROR_ROW_LIMIT = 40
+_MESSAGE_LIMIT = 2000
+_URL_USERINFO = re.compile(r"(?i)(https?://)[^/\s@]+(?::[^/\s@]*)?@")
 _LOG = logging.getLogger("yaver_releases")
 
 
@@ -36,12 +41,56 @@ def _usage_int(value: object) -> int:
     return number
 
 
-def _usage_label(value: object) -> str:
+def _usage_label(value: object, *, limit: int = 160) -> str:
     text = str(value or "").replace("\x00", " ").replace("\r", " ").replace("\n", " ")
     text = text.replace("<", "").replace(">", "").strip()
-    if len(text) > 160:
-        text = text[:160].rstrip()
+    text = " ".join(text.split())
+    if len(text) > limit:
+        text = text[:limit].rstrip()
     return text
+
+
+def _usage_message(value: object) -> str:
+    """Keep line breaks. Drop a value that is not text."""
+    if value is None or isinstance(value, (dict, list, bool)):
+        return ""
+    text = str(value).replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _URL_USERINFO.sub(r"\1", text).strip()
+    if len(text) > _MESSAGE_LIMIT:
+        text = text[:_MESSAGE_LIMIT].rstrip()
+    return text
+
+
+def _usage_errors(value: object) -> tuple[list[dict], int]:
+    if not isinstance(value, list):
+        return [], 0
+    rows: list[dict] = []
+    dropped = 0
+    for item in value:
+        if not isinstance(item, dict):
+            dropped += 1
+            continue
+        if len(rows) >= _ERROR_ROW_LIMIT:
+            dropped += 1
+            continue
+        rows.append(
+            {
+                "job_id": _usage_label(item.get("job_id"), limit=80),
+                "issue_key": _usage_label(item.get("issue_key"), limit=40),
+                "summary": _usage_label(item.get("summary")),
+                "status": _usage_label(item.get("status"), limit=40),
+                "category": _usage_label(item.get("category"), limit=40),
+                "source": _usage_label(item.get("source"), limit=40),
+                "backend": _usage_label(item.get("backend"), limit=40),
+                "agent": _usage_label(item.get("agent"), limit=80),
+                "model": _usage_label(item.get("model")),
+                "repository": _usage_label(item.get("repository")),
+                "started_at": _usage_label(item.get("started_at"), limit=40),
+                "completed_at": _usage_label(item.get("completed_at"), limit=40),
+                "error_message": _usage_message(item.get("error_message")),
+            }
+        )
+    return rows, dropped
 
 
 def _usage_group(value: object) -> dict[str, int]:
@@ -80,9 +129,10 @@ def _usage_rows(value: object, *, outcomes: bool) -> list[dict]:
 
 
 def clean_usage(value: object) -> dict | None:
-    """Keep counts and short labels. Drop anything else the install sent."""
+    """Keep counts, short labels, and the error-job list. Drop anything else."""
     if not isinstance(value, dict):
         return None
+    errors, extra_omitted = _usage_errors(value.get("errors"))
     return {
         "period": "all",
         "jobs": _usage_int(value.get("jobs")),
@@ -104,6 +154,9 @@ def clean_usage(value: object) -> dict | None:
         "agents": _usage_rows(value.get("agents"), outcomes=True),
         "repositories": _usage_rows(value.get("repositories"), outcomes=False),
         "statuses": _usage_rows(value.get("statuses"), outcomes=False),
+        "errors": errors,
+        "errors_omitted": _usage_int(value.get("errors_omitted")) + extra_omitted,
+        "errors_available": isinstance(value.get("errors"), list),
     }
 
 

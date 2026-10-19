@@ -691,6 +691,41 @@ h2.need-title {
   font-size: 0.72rem;
 }
 
+button.stat,
+button.stat:hover {
+  width: 100%;
+  margin-top: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 400;
+  letter-spacing: normal;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 0.7rem 0.8rem;
+  min-height: 0;
+  text-align: left;
+}
+
+button.stat:hover {
+  background: var(--surface-hover);
+}
+
+button.stat[aria-expanded="true"] {
+  border-color: var(--danger);
+}
+
+.error-message {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--danger-text);
+}
+
 .card .button { margin-top: 0; align-self: flex-start; }
 
 .card:not(.card-lead) .meta {
@@ -713,7 +748,7 @@ h2.need-title {
 
 .narrow { max-width: 28rem; }
 
-button:not(.theme),
+button:not(.theme):not(.stat),
 .button {
   display: inline-flex;
   align-items: center;
@@ -736,7 +771,7 @@ button:not(.theme),
 }
 
 a.button:hover,
-button:hover:not(.theme):not(.secondary):not(.danger) {
+button:hover:not(.theme):not(.secondary):not(.danger):not(.stat) {
   background: var(--accent-hover);
   color: var(--accent-ink);
 }

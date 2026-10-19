@@ -79,7 +79,9 @@
 <div class="stats">
   <div class="stat"><span class="num">{{ detail.usage.jobs }}</span><span class="lbl">Jobs</span></div>
   <div class="stat"><span class="num">{{ detail.usage.completed }}</span><span class="lbl">Completed</span></div>
-  <div class="stat"><span class="num">{{ detail.usage.error }}</span><span class="lbl">Error</span></div>
+  <button type="button" class="stat" id="error-count" aria-expanded="false" aria-controls="error-jobs">
+    <span class="num">{{ detail.usage.error }}</span><span class="lbl">Error</span>
+  </button>
   <div class="stat"><span class="num">{{ detail.usage.cancelled }}</span><span class="lbl">Cancelled</span></div>
   <div class="stat"><span class="num">{{ detail.usage.in_flight }}</span><span class="lbl">In flight</span></div>
   <div class="stat"><span class="num">{{ detail.usage.plan_ready }}</span><span class="lbl">Plan ready</span></div>
@@ -88,6 +90,62 @@
   <div class="stat"><span class="num">{{ detail.usage.merged }}</span><span class="lbl">Merged</span></div>
   <div class="stat"><span class="num">{{ detail.usage.closed }}</span><span class="lbl">Closed</span></div>
 </div>
+
+<section id="error-jobs" class="panel" hidden>
+  <h3>Error jobs</h3>
+  {% if detail.usage.error and not detail.usage.errors_available %}
+  <p class="quiet">This install did not send error messages. Update Yaver, then select this address again.</p>
+  {% elif not detail.usage.errors %}
+  <p class="quiet">No error jobs.</p>
+  {% else %}
+  <p class="quiet">Newest jobs counted as Error. The message is the one Yaver stored when the job failed.</p>
+  {% if detail.usage.errors_omitted %}
+  <p class="quiet">{{ detail.usage.errors_omitted }} older error jobs are not listed.</p>
+  {% endif %}
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Issue</th>
+        <th>Summary</th>
+        <th>When</th>
+        <th>Kind</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in detail.usage.errors %}
+      <tr>
+        <td>{{ job.issue_key or "—" }}</td>
+        <td>{{ job.summary or "—" }}</td>
+        <td>{{ job.started_at or job.completed_at or "—" }}</td>
+        <td>{{ job.category or "—" }}{% if job.source %} · {{ job.source }}{% endif %}{% if job.backend %} · {{ job.backend }}{% endif %}{% if job.agent %} · {{ job.agent }}{% endif %}</td>
+      </tr>
+      <tr>
+        <td colspan="4">
+          <pre class="error-message">{{ job.error_message or "No error message was stored." }}</pre>
+          {% if job.model or job.repository %}
+          <p class="quiet">{% if job.model %}Model {{ job.model }}. {% endif %}{% if job.repository %}Repository {{ job.repository }}.{% endif %}</p>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+<script>
+(function () {
+  var button = document.getElementById("error-count");
+  var panel = document.getElementById("error-jobs");
+  if (!button || !panel) return;
+  button.addEventListener("click", function () {
+    var open = panel.hidden;
+    panel.hidden = !open;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+})();
+</script>
 
 <h3>Opened by us</h3>
 <p class="quiet">Merge requests this install opened. Open {{ detail.usage.ours.opened }}. Merged {{ detail.usage.ours.merged }}. Closed {{ detail.usage.ours.closed }}. Total {{ detail.usage.ours.total }}.</p>
